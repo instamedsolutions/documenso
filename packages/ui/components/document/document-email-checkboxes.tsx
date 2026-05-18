@@ -199,6 +199,45 @@ export const DocumentEmailCheckboxes = ({ value, onChange, className }: Document
 
       <div className="flex flex-row items-center">
         <Checkbox
+          id={DocumentEmailEvents.AttachCompletedDocument}
+          className="h-5 w-5"
+          checked={value.attachCompletedDocument}
+          onCheckedChange={(checked) =>
+            onChange({ ...value, [DocumentEmailEvents.AttachCompletedDocument]: Boolean(checked) })
+          }
+        />
+
+        <label
+          className="ml-2 flex flex-row items-center text-muted-foreground text-sm"
+          htmlFor={DocumentEmailEvents.AttachCompletedDocument}
+        >
+          <Trans>Attach completed documents to completion emails</Trans>
+
+          <Tooltip>
+            <TooltipTrigger>
+              <InfoIcon className="mx-2 h-4 w-4" />
+            </TooltipTrigger>
+
+            <TooltipContent className="max-w-md space-y-2 p-4 text-foreground">
+              <h2>
+                <strong>
+                  <Trans>Completed document attachments</Trans>
+                </strong>
+              </h2>
+
+              <p>
+                <Trans>
+                  When enabled, completion emails include the finalized PDF as an attachment for recipients and the
+                  document owner.
+                </Trans>
+              </p>
+            </TooltipContent>
+          </Tooltip>
+        </label>
+      </div>
+
+      <div className="flex flex-row items-center">
+        <Checkbox
           id={DocumentEmailEvents.DocumentDeleted}
           className="h-5 w-5"
           checked={value.documentDeleted}

@@ -60,6 +60,7 @@ const DB_EXPECTED_VALUES = {
     recipientRemoved: false,
     documentPending: false,
     documentCompleted: false,
+    attachCompletedDocument: false,
     documentDeleted: false,
     ownerDocumentCompleted: false,
     ownerRecipientExpired: false,
@@ -196,6 +197,7 @@ const runSettingsFlow = async ({ root }: TEnvelopeEditorSurface, { externalId, i
   await root.locator('#recipientRemoved').click();
   await root.locator('#documentPending').click();
   await root.locator('#documentCompleted').click();
+  await root.locator('#attachCompletedDocument').click();
   await root.locator('#documentDeleted').click();
   await root.locator('#ownerDocumentCompleted').click();
   await root.locator('#ownerRecipientExpired').click();
@@ -270,6 +272,7 @@ const runSettingsFlow = async ({ root }: TEnvelopeEditorSurface, { externalId, i
   await expect(root.locator('#recipientRemoved')).toHaveAttribute('aria-checked', 'false');
   await expect(root.locator('#documentPending')).toHaveAttribute('aria-checked', 'false');
   await expect(root.locator('#documentCompleted')).toHaveAttribute('aria-checked', 'false');
+  await expect(root.locator('#attachCompletedDocument')).toHaveAttribute('aria-checked', 'false');
   await expect(root.locator('#documentDeleted')).toHaveAttribute('aria-checked', 'false');
   await expect(root.locator('#ownerDocumentCompleted')).toHaveAttribute('aria-checked', 'false');
   await expect(root.locator('#ownerRecipientExpired')).toHaveAttribute('aria-checked', 'false');

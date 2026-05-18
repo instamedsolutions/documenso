@@ -223,6 +223,7 @@ test('[ORGANISATIONS]: manage email preferences', async ({ page }) => {
     recipientSigned: false, // unchecked
     documentPending: false, // unchecked
     documentCompleted: true,
+    attachCompletedDocument: true,
     documentDeleted: false, // unchecked
     ownerRecipientExpired: true,
     ownerDocumentCompleted: true,
@@ -260,6 +261,7 @@ test('[ORGANISATIONS]: manage email preferences', async ({ page }) => {
     recipientRemoved: true,
     documentPending: true,
     documentCompleted: false,
+    attachCompletedDocument: true,
     documentDeleted: true,
     ownerRecipientExpired: true,
     ownerDocumentCompleted: false,
@@ -282,6 +284,7 @@ test('[ORGANISATIONS]: manage email preferences', async ({ page }) => {
     recipientRemoved: true,
     documentPending: true,
     documentCompleted: false,
+    attachCompletedDocument: true,
     documentDeleted: true,
     ownerRecipientExpired: true,
     ownerDocumentCompleted: false,
@@ -309,6 +312,7 @@ test('[ORGANISATIONS]: manage email preferences', async ({ page }) => {
     recipientSigned: false,
     documentPending: false,
     documentCompleted: true,
+    attachCompletedDocument: true,
     documentDeleted: false,
     ownerRecipientExpired: true,
     ownerDocumentCompleted: true,
@@ -331,6 +335,7 @@ test('[ORGANISATIONS]: manage email preferences', async ({ page }) => {
     recipientSigned: false,
     documentPending: false,
     documentCompleted: true,
+    attachCompletedDocument: true,
     documentDeleted: false,
     ownerRecipientExpired: true,
     ownerDocumentCompleted: true,

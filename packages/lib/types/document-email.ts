@@ -8,6 +8,7 @@ export enum DocumentEmailEvents {
   RecipientSigned = 'recipientSigned',
   DocumentPending = 'documentPending',
   DocumentCompleted = 'documentCompleted',
+  AttachCompletedDocument = 'attachCompletedDocument',
   DocumentDeleted = 'documentDeleted',
   OwnerDocumentCompleted = 'ownerDocumentCompleted',
   OwnerRecipientExpired = 'ownerRecipientExpired',
@@ -37,6 +38,10 @@ export const ZDocumentEmailSettingsSchema = z
     documentCompleted: z
       .boolean()
       .describe('Whether to send an email to all recipients when the document is complete.')
+      .default(true),
+    attachCompletedDocument: z
+      .boolean()
+      .describe('Whether to attach the completed document to completion emails.')
       .default(true),
     documentDeleted: z
       .boolean()
@@ -73,6 +78,7 @@ export const extractDerivedDocumentEmailSettings = (documentMeta?: DocumentMeta 
     recipientSigned: false,
     documentPending: false,
     documentCompleted: false,
+    attachCompletedDocument: emailSettings.attachCompletedDocument,
     documentDeleted: false,
     ownerDocumentCompleted: emailSettings.ownerDocumentCompleted,
     ownerRecipientExpired: emailSettings.ownerRecipientExpired,
@@ -86,6 +92,7 @@ export const DEFAULT_DOCUMENT_EMAIL_SETTINGS: TDocumentEmailSettings = {
   recipientSigned: true,
   documentPending: true,
   documentCompleted: true,
+  attachCompletedDocument: true,
   documentDeleted: true,
   ownerDocumentCompleted: true,
   ownerRecipientExpired: true,

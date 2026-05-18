@@ -135,6 +135,9 @@ test.describe('AutoSave Subject Step', () => {
       await expect(page.getByText('Email recipients when the document is completed', { exact: true })).toBeChecked({
         checked: emailSettings?.documentCompleted,
       });
+      await expect(page.getByText('Attach completed documents to completion emails')).toBeChecked({
+        checked: emailSettings?.attachCompletedDocument,
+      });
       await expect(page.getByText('Email recipients when a pending document is deleted')).toBeChecked({
         checked: emailSettings?.documentDeleted,
       });
@@ -198,6 +201,9 @@ test.describe('AutoSave Subject Step', () => {
       });
       await expect(page.getByText('Email recipients when the document is completed', { exact: true })).toBeChecked({
         checked: retrievedDocumentData.documentMeta?.emailSettings?.documentCompleted,
+      });
+      await expect(page.getByText('Attach completed documents to completion emails')).toBeChecked({
+        checked: retrievedDocumentData.documentMeta?.emailSettings?.attachCompletedDocument,
       });
       await expect(page.getByText('Email recipients when a pending document is deleted')).toBeChecked({
         checked: retrievedDocumentData.documentMeta?.emailSettings?.documentDeleted,

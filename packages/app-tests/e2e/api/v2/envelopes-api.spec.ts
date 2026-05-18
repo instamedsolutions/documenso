@@ -203,6 +203,7 @@ test.describe('API V2 Envelopes', () => {
             recipientSigned: false,
             documentPending: false,
             documentCompleted: false,
+            attachCompletedDocument: true,
             documentDeleted: false,
             ownerRecipientExpired: true,
             ownerDocumentCompleted: true,

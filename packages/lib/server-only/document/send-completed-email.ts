@@ -78,21 +78,24 @@ export const sendCompletedEmail = async ({ id, requestMetadata }: SendDocumentOp
   });
 
   const { user: owner } = envelope;
+  const emailSettings = extractDerivedDocumentEmailSettings(envelope.documentMeta);
 
-  const completedDocumentEmailAttachments = await Promise.all(
-    envelope.envelopeItems.map(async (envelopeItem) => {
-      const file = await getFileServerSide(envelopeItem.documentData);
+  const completedDocumentEmailAttachments = emailSettings.attachCompletedDocument
+    ? await Promise.all(
+        envelope.envelopeItems.map(async (envelopeItem) => {
+          const file = await getFileServerSide(envelopeItem.documentData);
 
-      // Use the envelope title for version 1, and the envelope item title for version 2.
-      const fileNameToUse = envelope.internalVersion === 1 ? envelope.title : envelopeItem.title + '.pdf';
+          // Use the envelope title for version 1, and the envelope item title for version 2.
+          const fileNameToUse = envelope.internalVersion === 1 ? envelope.title : `${envelopeItem.title}.pdf`;
 
-      return {
-        filename: fileNameToUse.endsWith('.pdf') ? fileNameToUse : fileNameToUse + '.pdf',
-        content: Buffer.from(file),
-        contentType: 'application/pdf',
-      };
-    }),
-  );
+          return {
+            filename: fileNameToUse.endsWith('.pdf') ? fileNameToUse : `${fileNameToUse}.pdf`,
+            content: Buffer.from(file),
+            contentType: 'application/pdf',
+          };
+        }),
+      )
+    : undefined;
 
   const assetBaseUrl = NEXT_PUBLIC_WEBAPP_URL() || 'http://localhost:3000';
 
@@ -104,7 +107,6 @@ export const sendCompletedEmail = async ({ id, requestMetadata }: SendDocumentOp
     documentOwnerDownloadLink = `${NEXT_PUBLIC_WEBAPP_URL()}/t/${envelope.team.url}/documents/${envelope.id}`;
   }
 
-  const emailSettings = extractDerivedDocumentEmailSettings(envelope.documentMeta);
   const isDocumentCompletedEmailEnabled = emailSettings.documentCompleted;
   const isOwnerDocumentCompletedEmailEnabled = emailSettings.ownerDocumentCompleted;
 
@@ -146,7 +148,7 @@ export const sendCompletedEmail = async ({ id, requestMetadata }: SendDocumentOp
       subject: i18n._(msg`Signing Complete!`),
       html,
       text,
-      attachments: completedDocumentEmailAttachments,
+      ...(completedDocumentEmailAttachments ? { attachments: completedDocumentEmailAttachments } : {}),
     });
 
     await prisma.documentAuditLog.create({
@@ -219,7 +221,7 @@ export const sendCompletedEmail = async ({ id, requestMetadata }: SendDocumentOp
             : i18n._(msg`Signing Complete!`),
         html,
         text,
-        attachments: completedDocumentEmailAttachments,
+        ...(completedDocumentEmailAttachments ? { attachments: completedDocumentEmailAttachments } : {}),
       });
 
       await prisma.documentAuditLog.create({
