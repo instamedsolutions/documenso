@@ -68,6 +68,21 @@ export const sendCompletedEmail = async ({ id, requestMetadata }: SendDocumentOp
     throw new Error('Document has no recipients');
   }
 
+  const { user: owner } = envelope;
+  const emailSettings = extractDerivedDocumentEmailSettings(envelope.documentMeta);
+  const isDocumentCompletedEmailEnabled = emailSettings.documentCompleted;
+  const isOwnerDocumentCompletedEmailEnabled = emailSettings.ownerDocumentCompleted;
+  const shouldSendOwnerDocumentCompletedEmail =
+    isOwnerDocumentCompletedEmailEnabled &&
+    (!envelope.recipients.find((recipient) => recipient.email === owner.email) || !isDocumentCompletedEmailEnabled);
+  const recipientsToNotify = isDocumentCompletedEmailEnabled
+    ? envelope.recipients.filter((recipient) => isRecipientEmailValidForSending(recipient))
+    : [];
+
+  if (!shouldSendOwnerDocumentCompletedEmail && recipientsToNotify.length === 0) {
+    return;
+  }
+
   const { branding, emailLanguage, senderEmail, replyToEmail } = await getEmailContext({
     emailType: 'RECIPIENT',
     source: {
@@ -76,9 +91,6 @@ export const sendCompletedEmail = async ({ id, requestMetadata }: SendDocumentOp
     },
     meta: envelope.documentMeta,
   });
-
-  const { user: owner } = envelope;
-  const emailSettings = extractDerivedDocumentEmailSettings(envelope.documentMeta);
 
   const completedDocumentEmailAttachments = emailSettings.attachCompletedDocument
     ? await Promise.all(
@@ -107,18 +119,7 @@ export const sendCompletedEmail = async ({ id, requestMetadata }: SendDocumentOp
     documentOwnerDownloadLink = `${NEXT_PUBLIC_WEBAPP_URL()}/t/${envelope.team.url}/documents/${envelope.id}`;
   }
 
-  const isDocumentCompletedEmailEnabled = emailSettings.documentCompleted;
-  const isOwnerDocumentCompletedEmailEnabled = emailSettings.ownerDocumentCompleted;
-
-  // Send email to document owner if:
-  // 1. Owner document completed emails are enabled AND
-  // 2. Either:
-  //    - The owner is not a recipient, OR
-  //    - Recipient emails are disabled
-  if (
-    isOwnerDocumentCompletedEmailEnabled &&
-    (!envelope.recipients.find((recipient) => recipient.email === owner.email) || !isDocumentCompletedEmailEnabled)
-  ) {
+  if (shouldSendOwnerDocumentCompletedEmail) {
     const template = createElement(DocumentCompletedEmailTemplate, {
       documentName: envelope.title,
       assetBaseUrl,
@@ -168,12 +169,6 @@ export const sendCompletedEmail = async ({ id, requestMetadata }: SendDocumentOp
       }),
     });
   }
-
-  if (!isDocumentCompletedEmailEnabled) {
-    return;
-  }
-
-  const recipientsToNotify = envelope.recipients.filter((recipient) => isRecipientEmailValidForSending(recipient));
 
   await Promise.all(
     recipientsToNotify.map(async (recipient) => {
