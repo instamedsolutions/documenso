@@ -72,6 +72,9 @@ export const sendCompletedEmail = async ({ id, requestMetadata }: SendDocumentOp
   const emailSettings = extractDerivedDocumentEmailSettings(envelope.documentMeta);
   const isDocumentCompletedEmailEnabled = emailSettings.documentCompleted;
   const isOwnerDocumentCompletedEmailEnabled = emailSettings.ownerDocumentCompleted;
+  // Send the owner completion email when owner notifications are enabled and either:
+  // 1. the owner is not already receiving a recipient completion email, or
+  // 2. recipient completion emails are disabled entirely.
   const shouldSendOwnerDocumentCompletedEmail =
     isOwnerDocumentCompletedEmailEnabled &&
     (!envelope.recipients.find((recipient) => recipient.email === owner.email) || !isDocumentCompletedEmailEnabled);
