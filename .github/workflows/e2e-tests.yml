@@ -42,6 +42,9 @@ jobs:
           # Needed since we use next start which will set the NODE_ENV to production
           NEXT_PRIVATE_SIGNING_LOCAL_FILE_PATH: './example/cert.p12'
           DANGEROUS_BYPASS_RATE_LIMITS: 'true'
+          # Enables the master-key admin endpoint so its e2e suite runs instead
+          # of skipping. Read by both the server and the Playwright test process.
+          NEXT_PRIVATE_MASTER_API_KEY: 'master_api_key_e2e'
 
       - uses: actions/upload-artifact@v4
         if: always()

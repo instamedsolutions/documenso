@@ -11,9 +11,16 @@ export interface CreateUserOptions {
   email: string;
   password: string;
   signature?: string | null;
+  /**
+   * When provided, marks the user's email as verified at the given time so the
+   * account is immediately enabled (able to sign in) without the email
+   * confirmation flow. Defaults to `null` (unverified), preserving the normal
+   * public signup behaviour.
+   */
+  emailVerified?: Date | null;
 }
 
-export const createUser = async ({ name, email, password, signature }: CreateUserOptions) => {
+export const createUser = async ({ name, email, password, signature, emailVerified = null }: CreateUserOptions) => {
   const hashedPassword = await hash(password, SALT_ROUNDS);
 
   const userExists = await prisma.user.findFirst({
@@ -33,6 +40,7 @@ export const createUser = async ({ name, email, password, signature }: CreateUse
         email: email.toLowerCase(),
         password: hashedPassword, // Todo: (RR7) Drop password.
         signature,
+        emailVerified,
       },
     });
 

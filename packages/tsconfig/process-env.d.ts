@@ -80,6 +80,13 @@ declare namespace NodeJS {
     NEXT_PUBLIC_DISABLE_OIDC_SIGNUP?: string;
     NEXT_PRIVATE_ALLOWED_SIGNUP_DOMAINS?: string;
 
+    /**
+     * Master API key for privileged server-to-server admin endpoints
+     * (e.g. creating user accounts via /api/auth/admin/create-user).
+     * Leave unset to disable the feature.
+     */
+    NEXT_PRIVATE_MASTER_API_KEY?: string;
+
     NEXT_PRIVATE_BROWSERLESS_URL?: string;
 
     NEXT_PRIVATE_JOBS_PROVIDER?: 'inngest' | 'local' | 'bullmq';

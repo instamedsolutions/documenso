@@ -7,6 +7,7 @@ import type { ContentfulStatusCode } from 'hono/utils/http-status';
 
 import { setCsrfCookie } from './lib/session/session-cookies';
 import { accountRoute } from './routes/account';
+import { adminRoute } from './routes/admin';
 import { callbackRoute } from './routes/callback';
 import { emailPasswordRoute } from './routes/email-password';
 import { oauthRoute } from './routes/oauth';
@@ -44,6 +45,7 @@ export const auth = new Hono<HonoAuthContext>()
   .route('/', sessionRoute)
   .route('/', signOutRoute)
   .route('/', accountRoute)
+  .route('/admin', adminRoute)
   .route('/callback', callbackRoute)
   .route('/oauth', oauthRoute)
   .route('/email-password', emailPasswordRoute)
