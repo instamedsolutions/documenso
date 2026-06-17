@@ -5,6 +5,7 @@ import { expect, test } from '@playwright/test';
 
 const WEBAPP_BASE_URL = NEXT_PUBLIC_WEBAPP_URL();
 const ENDPOINT = `${WEBAPP_BASE_URL}/api/auth/admin/create-user`;
+const RESET_ENDPOINT = `${WEBAPP_BASE_URL}/api/auth/admin/reset-password`;
 
 const MASTER_API_KEY = process.env.NEXT_PRIVATE_MASTER_API_KEY ?? '';
 
@@ -133,5 +134,47 @@ test.describe('Admin master-key user creation', () => {
 
     expect(second.ok()).toBeFalsy();
     expect(second.status()).toBeGreaterThanOrEqual(400);
+  });
+
+  test('reset-password rejects requests without an Authorization header', async ({ request }) => {
+    const res = await request.post(RESET_ENDPOINT, {
+      data: { email: uniqueEmail(), password: PASSWORD },
+    });
+
+    expect(res.status()).toBe(401);
+  });
+
+  test('reset-password returns 404 for a non-existent account', async ({ request }) => {
+    const res = await request.post(RESET_ENDPOINT, {
+      headers: { Authorization: `Bearer ${MASTER_API_KEY}` },
+      data: { email: uniqueEmail(), password: PASSWORD },
+    });
+
+    expect(res.status()).toBe(404);
+  });
+
+  test('reset-password resets an existing account password and keeps it verified', async ({ request }) => {
+    const email = uniqueEmail();
+
+    const created = await request.post(ENDPOINT, {
+      headers: { Authorization: `Bearer ${MASTER_API_KEY}` },
+      data: validBody({ email, enabled: true }),
+    });
+    expect(created.status()).toBe(201);
+
+    const before = await prisma.user.findFirst({ where: { email } });
+    expect(before).not.toBeNull();
+
+    const res = await request.post(RESET_ENDPOINT, {
+      headers: { Authorization: `Bearer ${MASTER_API_KEY}` },
+      data: { email, password: `${PASSWORD}New`, enabled: true },
+    });
+
+    expect(res.status()).toBe(200);
+
+    const after = await prisma.user.findFirst({ where: { email } });
+    // The password hash changed and the account is still verified (usable).
+    expect(after?.password).not.toBe(before?.password);
+    expect(after?.emailVerified).not.toBeNull();
   });
 });

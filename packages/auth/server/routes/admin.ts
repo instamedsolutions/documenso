@@ -1,12 +1,13 @@
 import { AppError } from '@documenso/lib/errors/app-error';
 import { jobsClient } from '@documenso/lib/jobs/client';
 import { verifyMasterApiKey } from '@documenso/lib/server-only/auth/verify-master-api-key';
+import { adminResetUserPassword } from '@documenso/lib/server-only/user/admin-reset-user-password';
 import { createUser } from '@documenso/lib/server-only/user/create-user';
 import { sValidator } from '@hono/standard-validator';
 import { Hono } from 'hono';
 
 import { AuthenticationErrorCode } from '../lib/errors/error-codes';
-import { ZAdminCreateUserSchema } from '../types/admin';
+import { ZAdminCreateUserSchema, ZAdminResetPasswordSchema } from '../types/admin';
 import type { HonoAuthContext } from '../types/context';
 
 /**
@@ -72,5 +73,31 @@ export const adminRoute = new Hono<HonoAuthContext>()
         emailVerified: user.emailVerified,
       },
       201,
+    );
+  })
+  /**
+   * Reset an existing user's password.
+   *
+   * Intended for re-provisioning a previously disconnected account: the backend
+   * resets the password here, then signs in to generate a fresh API token.
+   * When `enabled` is true the account is (re-)verified so it can sign in.
+   */
+  .post('/reset-password', sValidator('json', ZAdminResetPasswordSchema), async (c) => {
+    const { email, password, enabled } = c.req.valid('json');
+
+    const user = await adminResetUserPassword({
+      email,
+      password,
+      enabled,
+    });
+
+    return c.json(
+      {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        emailVerified: user.emailVerified,
+      },
+      200,
     );
   });

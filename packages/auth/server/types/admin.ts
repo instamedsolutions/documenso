@@ -20,3 +20,17 @@ export const ZAdminCreateUserSchema = z.object({
 });
 
 export type TAdminCreateUserSchema = z.infer<typeof ZAdminCreateUserSchema>;
+
+/**
+ * Payload for resetting an existing user's password via the master API key.
+ *
+ * When `enabled` is true the account's email is (re-)marked as verified so it
+ * can sign in immediately.
+ */
+export const ZAdminResetPasswordSchema = z.object({
+  email: zEmail(),
+  password: ZPasswordSchema,
+  enabled: z.boolean().optional().default(false),
+});
+
+export type TAdminResetPasswordSchema = z.infer<typeof ZAdminResetPasswordSchema>;
