@@ -1,0 +1,75 @@
+name: Retag image to ECR
+description: >-
+  Mirror the freshly built ghcr.io image to Amazon ECR by re-tagging it
+  (docker pull + tag + push), avoiding a second full Next.js rebuild.
+
+inputs:
+  registry_url:
+    description: Source container registry hostname (where the image was built)
+    required: false
+    default: ghcr.io
+  registry_username:
+    description: Source registry username (used to pull the built image)
+    required: true
+  registry_password:
+    description: Source registry password/token (needs packages:read on this repo)
+    required: true
+  docker_image:
+    description: Repository/image name, e.g. instamedsolutions/documenso
+    required: true
+  docker_tag:
+    description: Tag to mirror (must match the tag the build job pushed)
+    required: false
+    default: latest
+  aws_role_arn:
+    description: AWS IAM role ARN to assume via OIDC
+    required: true
+  aws_account_id:
+    description: AWS account id owning the ECR registry
+    required: true
+  aws_region:
+    description: AWS region of the ECR registry
+    required: false
+    default: eu-west-3
+  ecr_repository:
+    # MUST match the infra `registry_project` (= "documenso"), because ECS pulls
+    # ${account}.dkr.ecr.${region}.amazonaws.com/${registry_project}:${tag}.
+    description: ECR repository name (must match the infra registry_project)
+    required: false
+    default: documenso
+
+runs:
+  using: composite
+  steps:
+    - name: Normalize image name
+      id: image
+      shell: bash
+      run: echo "name=$(echo '${{ inputs.docker_image }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+
+    - name: Login to source registry (ghcr)
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ inputs.registry_url }}
+        username: ${{ inputs.registry_username }}
+        password: ${{ inputs.registry_password }}
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        role-to-assume: ${{ inputs.aws_role_arn }}
+        aws-region: ${{ inputs.aws_region }}
+
+    - name: Login to Amazon ECR
+      uses: aws-actions/amazon-ecr-login@v2
+
+    - name: Retag ghcr image to ECR and push
+      shell: bash
+      env:
+        SOURCE_IMAGE: ${{ inputs.registry_url }}/${{ steps.image.outputs.name }}:${{ inputs.docker_tag }}
+        ECR_IMAGE: ${{ inputs.aws_account_id }}.dkr.ecr.${{ inputs.aws_region }}.amazonaws.com/${{ inputs.ecr_repository }}:${{ inputs.docker_tag }}
+      run: |
+        set -euo pipefail
+        echo "Mirroring $SOURCE_IMAGE -> $ECR_IMAGE"
+        docker pull "$SOURCE_IMAGE"
+        docker tag "$SOURCE_IMAGE" "$ECR_IMAGE"
+        docker push "$ECR_IMAGE"

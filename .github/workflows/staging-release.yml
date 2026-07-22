@@ -38,3 +38,31 @@ jobs:
           docker_tag: ${{ env.ENVIRONMENT }}
           next_private_telemetry_key: ${{ secrets.NEXT_PRIVATE_TELEMETRY_KEY }}
           next_private_telemetry_host: ${{ secrets.NEXT_PRIVATE_TELEMETRY_HOST }}
+
+  # Mirror the image just pushed to ghcr into Amazon ECR, so ECS pulls it over
+  # the VPC's ECR interface endpoints instead of ghcr.io over the NAT Gateway.
+  # Retag (pull + tag + push) rather than rebuild - the Next.js build already
+  # ran in docker-build-staging.
+  ecr-deploy:
+    name: Mirror Staging Image to ECR
+    needs: docker-build-staging
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+      packages: read
+    environment:
+      name: 'staging'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Retag ghcr image to ECR
+        uses: ./.github/actions/retag-to-ecr
+        with:
+          registry_username: ${{ github.actor }}
+          registry_password: ${{ secrets.GITHUB_TOKEN }}
+          docker_image: ${{ env.IMAGE_NAME }}
+          docker_tag: ${{ env.ENVIRONMENT }}
+          aws_role_arn: ${{ secrets.AWS_ROLE_ARN }}
+          aws_account_id: ${{ secrets.AWS_ACCOUNT_ID }}
