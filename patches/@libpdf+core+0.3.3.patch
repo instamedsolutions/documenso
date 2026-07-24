@@ -1,0 +1,271 @@
+diff --git a/node_modules/@libpdf/core/dist/index.mjs b/node_modules/@libpdf/core/dist/index.mjs
+index 17ac26f..1db17a3 100644
+--- a/node_modules/@libpdf/core/dist/index.mjs
++++ b/node_modules/@libpdf/core/dist/index.mjs
+@@ -26282,6 +26282,49 @@ var TextState = class TextState {
+ 		};
+ 	}
+ 	/**
++	* Capture a full snapshot of the current rendering state.
++	*
++	* Used to isolate nested content streams (form XObjects): the snapshot
++	* records the graphics-state stack depth so it can be unwound even if the
++	* nested content has unbalanced q/Q operators.
++	*/
++	captureState() {
++		return {
++			ctm: this.ctm.clone(),
++			tm: this.tm.clone(),
++			tlm: this.tlm.clone(),
++			font: this.font,
++			fontSize: this.fontSize,
++			charSpacing: this.charSpacing,
++			wordSpacing: this.wordSpacing,
++			horizontalScale: this.horizontalScale,
++			leading: this.leading,
++			rise: this.rise,
++			renderMode: this.renderMode,
++			graphicsStackDepth: this.graphicsStateStack.length
++		};
++	}
++	/**
++	* Restore a snapshot captured by {@link captureState}.
++	*
++	* Any graphics-state entries pushed since the snapshot are discarded, so a
++	* nested stream with extra q (or missing Q) operators cannot leak state.
++	*/
++	restoreState(snapshot) {
++		this.ctm = snapshot.ctm;
++		this.tm = snapshot.tm;
++		this.tlm = snapshot.tlm;
++		this.font = snapshot.font;
++		this.fontSize = snapshot.fontSize;
++		this.charSpacing = snapshot.charSpacing;
++		this.wordSpacing = snapshot.wordSpacing;
++		this.horizontalScale = snapshot.horizontalScale;
++		this.leading = snapshot.leading;
++		this.rise = snapshot.rise;
++		this.renderMode = snapshot.renderMode;
++		if (this.graphicsStateStack.length > snapshot.graphicsStackDepth) this.graphicsStateStack.length = snapshot.graphicsStackDepth;
++	}
++	/**
+ 	* Clone the current text state.
+ 	*/
+ 	clone() {
+@@ -26309,15 +26352,23 @@ var TextState = class TextState {
+ * Processes PDF content stream operators to extract text with position
+ * information, suitable for searching and text extraction.
+ */
++/** Maximum form XObject nesting depth, to guard against cyclic references. */
++const MAX_FORM_DEPTH = 16;
+ /**
+ * Extracts text from PDF content streams.
+ */
+ var TextExtractor = class {
+-	resolveFont;
+ 	state;
+ 	chars = [];
++	/** Resources for the content stream currently being processed. */
++	resources;
++	/** Current form XObject nesting depth. */
++	formDepth = 0;
+ 	constructor(options) {
+-		this.resolveFont = options.resolveFont;
++		this.resources = {
++			resolveFont: options.resolveFont,
++			resolveXObject: options.resolveXObject ?? (() => null)
++		};
+ 		this.state = new TextState();
+ 	}
+ 	/**
+@@ -26327,9 +26378,15 @@ var TextExtractor = class {
+ 	* @returns Array of extracted characters with positions
+ 	*/
+ 	extract(contentBytes) {
++		this.runContent(contentBytes);
++		return this.chars;
++	}
++	/**
++	* Parse and process a content stream's operations with the active resources.
++	*/
++	runContent(contentBytes) {
+ 		const { operations } = new ContentStreamParser(contentBytes).parse();
+ 		for (const op of operations) this.processOperation(op);
+-		return this.chars;
+ 	}
+ 	/**
+ 	* Process a single content stream operation.
+@@ -26402,6 +26459,46 @@ var TextExtractor = class {
+ 				this.state.moveToNextLine();
+ 				this.handleTj([operands[2]]);
+ 				break;
++			case "Do":
++				this.handleDo(operands);
++				break;
++		}
++	}
++	/**
++	* Handle Do (paint XObject) operator.
++	*
++	* Form XObjects carry their own content stream and resources, so any text
++	* inside them is extracted by processing the form inline. Image XObjects
++	* resolve to null and are skipped.
++	*/
++	handleDo(operands) {
++		const name = this.getName(operands[0]);
++		if (!name) return;
++		const form = this.resources.resolveXObject(name);
++		if (!form) return;
++		this.runForm(form);
++	}
++	/**
++	* Process a form XObject's content stream inline.
++	*
++	* Per the PDF spec (8.10.1), invoking a form is equivalent to wrapping its
++	* content in q/Q with the form's /Matrix concatenated onto the CTM. The
++	* caller's state is fully snapshotted and restored so that imbalanced q/Q or
++	* leftover text state inside the form cannot affect the rest of the page.
++	*/
++	runForm(form) {
++		if (this.formDepth >= MAX_FORM_DEPTH) return;
++		this.formDepth += 1;
++		const snapshot = this.state.captureState();
++		const previousResources = this.resources;
++		if (form.matrix) this.state.concatMatrix(form.matrix[0], form.matrix[1], form.matrix[2], form.matrix[3], form.matrix[4], form.matrix[5]);
++		this.resources = form.resources;
++		try {
++			this.runContent(form.bytes);
++		} finally {
++			this.resources = previousResources;
++			this.state.restoreState(snapshot);
++			this.formDepth -= 1;
+ 		}
+ 	}
+ 	/**
+@@ -26417,7 +26514,7 @@ var TextExtractor = class {
+ 		const fontName = this.getName(operands[0]);
+ 		const fontSize = this.getNumber(operands[1]);
+ 		if (fontName) {
+-			const font = this.resolveFont(fontName);
++			const font = this.resources.resolveFont(fontName);
+ 			this.state.font = font;
+ 		}
+ 		this.state.fontSize = fontSize;
+@@ -28476,7 +28573,11 @@ var PDFPage = class PDFPage {
+ 	*/
+ 	extractText(_options = {}) {
+ 		const contentBytes = this.getContentBytes();
+-		const lines = groupCharsIntoLines(new TextExtractor({ resolveFont: this.createFontResolver() }).extract(contentBytes));
++		const resources = this.createResourceResolver(this.resolveInheritedResources());
++		const lines = groupCharsIntoLines(new TextExtractor({
++			resolveFont: resources.resolveFont,
++			resolveXObject: resources.resolveXObject
++		}).extract(contentBytes));
+ 		const text = getPlainText(lines);
+ 		return {
+ 			pageIndex: this.index,
+@@ -28559,11 +28660,38 @@ var PDFPage = class PDFPage {
+ 		return null;
+ 	}
+ 	/**
+-	* Create a font resolver function for text extraction.
++	* Memoized resource resolvers, keyed by Resources dictionary identity.
++	* Shared across nested form XObjects to avoid rebuilding font caches and to
++	* break cyclic XObject references.
++	*/
++	_resourceResolverCache = /* @__PURE__ */ new Map();
++	/**
++	* Build a resource resolver (fonts + form XObjects) for a Resources dict.
++	*
++	* Form XObjects carry their own Resources, so resolvers are scoped per
++	* Resources dictionary. Resolvers are memoized by dictionary identity, both
++	* to avoid rebuilding font caches for repeated XObjects and so that cyclic
++	* resource references resolve to the same instance. (The XObject resolver
++	* recurses lazily, so building one resolver never builds another.)
+ 	*/
+-	createFontResolver() {
+-		const resourcesDict = this.resolveInheritedResources();
+-		if (!resourcesDict) return () => null;
++	createResourceResolver(resourcesDict) {
++		if (!resourcesDict) return {
++			resolveFont: () => null,
++			resolveXObject: () => null
++		};
++		const cached = this._resourceResolverCache.get(resourcesDict);
++		if (cached) return cached;
++		const resolver = {
++			resolveFont: this.createFontResolver(resourcesDict),
++			resolveXObject: this.createXObjectResolver(resourcesDict)
++		};
++		this._resourceResolverCache.set(resourcesDict, resolver);
++		return resolver;
++	}
++	/**
++	* Create a font resolver function for a given Resources dictionary.
++	*/
++	createFontResolver(resourcesDict) {
+ 		const font = resourcesDict.getDict("Font", this.ctx.resolve.bind(this.ctx));
+ 		if (!font) return () => null;
+ 		const fontCache = /* @__PURE__ */ new Map();
+@@ -28588,6 +28716,61 @@ var PDFPage = class PDFPage {
+ 			return fontCache.get(name) ?? null;
+ 		};
+ 	}
++	/**
++	* Create a form-XObject resolver for a given Resources dictionary.
++	*
++	* Only form XObjects (Subtype /Form) carry extractable text; image XObjects
++	* resolve to null so the extractor skips them.
++	*/
++	createXObjectResolver(resourcesDict) {
++		const resolve = this.ctx.resolve.bind(this.ctx);
++		const xobjects = resourcesDict.getDict("XObject", resolve);
++		if (!xobjects) return () => null;
++		const cache = /* @__PURE__ */ new Map();
++		return (name) => {
++			const existing = cache.get(name);
++			if (existing !== void 0) return existing;
++			let result = null;
++			const entry = xobjects.get(name, resolve);
++			if (entry instanceof PdfStream && entry.getName("Subtype", resolve)?.value === "Form") {
++				let bytes;
++				try {
++					bytes = entry.getDecodedData();
++				} catch {
++					bytes = new Uint8Array(0);
++				}
++				const formResources = entry.getDict("Resources", resolve) ?? resourcesDict;
++				result = {
++					bytes,
++					matrix: this.readMatrix(entry, resolve),
++					resources: this.createResourceResolver(formResources)
++				};
++			}
++			cache.set(name, result);
++			return result;
++		};
++	}
++	/**
++	* Read a 6-element /Matrix from an XObject dictionary, if present and valid.
++	*/
++	readMatrix(dict, resolve) {
++		const array = dict.getArray("Matrix", resolve);
++		if (!array || array.length !== 6) return;
++		const values = [];
++		for (let i = 0; i < 6; i++) {
++			const value = array.at(i, resolve);
++			if (value?.type !== "number") return;
++			values.push(value.value);
++		}
++		return [
++			values[0],
++			values[1],
++			values[2],
++			values[3],
++			values[4],
++			values[5]
++		];
++	}
+ };
+ 
+ //#endregion
