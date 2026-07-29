@@ -2102,6 +2102,14 @@ msgstr "Asistiendo"
 msgid "At least one signature type must be enabled"
 msgstr "Al menos un tipo de firma debe estar habilitado"
 
+#: apps/remix/app/components/general/admin-global-settings-section.tsx
+msgid "Attach completed document"
+msgstr ""
+
+#: packages/ui/components/document/document-email-checkboxes.tsx
+msgid "Attach completed documents to completion emails"
+msgstr ""
+
 #: apps/remix/app/components/general/document/document-attachments-popover.tsx
 #: apps/remix/app/components/general/document/embedded-editor-attachment-popover.tsx
 msgid "Attachment added successfully."
@@ -2767,6 +2775,10 @@ msgstr "Completado el"
 #: packages/email/templates/document-self-signed.tsx
 msgid "Completed Document"
 msgstr "Documento completado"
+
+#: packages/ui/components/document/document-email-checkboxes.tsx
+msgid "Completed document attachments"
+msgstr ""
 
 #: apps/remix/app/components/general/app-command-menu.tsx
 msgid "Completed documents"
@@ -12681,6 +12693,10 @@ msgstr "¿Estabas intentando editar este documento en su lugar?"
 msgid "What you can do with teams:"
 msgstr "Lo que puedes hacer con los equipos:"
 
+#: packages/ui/components/document/document-email-checkboxes.tsx
+msgid "When enabled, completion emails include the finalized PDF as an attachment for recipients and the document owner."
+msgstr ""
+
 #: apps/remix/app/components/embed/authoring/configure-document-recipients.tsx
 #: apps/remix/app/components/general/envelope-editor/envelope-editor-recipient-form.tsx
 #: packages/ui/primitives/document-flow/add-signers.tsx
@@ -13857,4 +13873,3 @@ msgstr "Su código de verificación:"
 #: apps/remix/app/routes/_authenticated+/o.$orgUrl.settings.sso.tsx
 msgid "your-domain.com another-domain.com"
 msgstr "su-dominio.com otro-dominio.com"
-
