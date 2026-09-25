@@ -29,11 +29,14 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: 'production'
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Build production image
+        id: build
         uses: ./.github/actions/build-docker-image
         with:
           registry_username: ${{ github.actor }}
@@ -49,11 +52,14 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: 'production'
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Build tagged image
+        id: build
         uses: ./.github/actions/build-docker-image
         with:
           registry_username: ${{ github.actor }}
@@ -63,14 +69,53 @@ jobs:
           next_private_telemetry_key: ${{ secrets.NEXT_PRIVATE_TELEMETRY_KEY }}
           next_private_telemetry_host: ${{ secrets.NEXT_PRIVATE_TELEMETRY_HOST }}
 
+  # Scan informatif (continue-on-error / exit-code 0 côté workflow mutualisé) de
+  # l'image juste construite sur ghcr, avant le mirroring vers ECR. On cible le
+  # digest immuable plutôt que le tag mutable 'latest', qu'un autre run pourrait
+  # réécrire entre le build et ce scan.
+  dependency-scan-image-latest:
+    name: Dependency scan (latest image)
+    needs: docker-build-production
+    if: github.ref_type == 'branch'
+    permissions:
+      contents: read
+      packages: read
+    uses: instamedsolutions/.github/.github/workflows/dependency-scan.yml@main
+    with:
+      trivy-image-ref: 'ghcr.io/instamedsolutions/documenso@${{ needs.docker-build-production.outputs.digest }}'
+      trivy-registry: 'ghcr.io'
+      trivy-registry-username: ${{ github.actor }}
+    secrets:
+      trivy-registry-password: ${{ secrets.GITHUB_TOKEN }}
+
+  # Même scan informatif, pour la variante image de tag (digest distinct de 'latest').
+  dependency-scan-image-tag:
+    name: Dependency scan (tag image)
+    needs: docker-build-tag
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: read
+      packages: read
+    uses: instamedsolutions/.github/.github/workflows/dependency-scan.yml@main
+    with:
+      trivy-image-ref: 'ghcr.io/instamedsolutions/documenso@${{ needs.docker-build-tag.outputs.digest }}'
+      trivy-registry: 'ghcr.io'
+      trivy-registry-username: ${{ github.actor }}
+    secrets:
+      trivy-registry-password: ${{ secrets.GITHUB_TOKEN }}
+
   # Mirror the image just pushed to ghcr into Amazon ECR, so ECS pulls it over
   # the VPC's ECR interface endpoints instead of ghcr.io over the NAT Gateway.
   # Retag (pull + tag + push) rather than rebuild - the Next.js build already
   # ran in the docker-build-* job. One job per build variant so it mirrors the
   # same tag that was built (latest for a branch push, vX.Y.Z for a tag).
+  # dependency-scan-image-* only orders the scan before the mirror; it never
+  # blocks the deploy since the scan itself is informative (continue-on-error) -
+  # the image scanned here (ghcr, pre-mirror) is the same one deployed, since
+  # the mirror step never rebuilds it.
   ecr-deploy-latest:
     name: Mirror Latest Image to ECR
-    needs: docker-build-production
+    needs: [docker-build-production, dependency-scan-image-latest]
     if: github.ref_type == 'branch'
     runs-on: ubuntu-latest
     permissions:
@@ -95,7 +140,7 @@ jobs:
 
   ecr-deploy-tag:
     name: Mirror Tagged Image to ECR
-    needs: docker-build-tag
+    needs: [docker-build-tag, dependency-scan-image-tag]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:

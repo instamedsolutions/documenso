@@ -25,11 +25,14 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: 'staging'
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Build staging image
+        id: build
         uses: ./.github/actions/build-docker-image
         with:
           registry_username: ${{ github.actor }}
@@ -39,13 +42,34 @@ jobs:
           next_private_telemetry_key: ${{ secrets.NEXT_PRIVATE_TELEMETRY_KEY }}
           next_private_telemetry_host: ${{ secrets.NEXT_PRIVATE_TELEMETRY_HOST }}
 
+  # Scan informatif (continue-on-error / exit-code 0 côté workflow mutualisé) de
+  # l'image juste construite sur ghcr, avant le mirroring vers ECR. On cible le
+  # digest immuable plutôt que le tag mutable 'staging', qu'un autre run pourrait
+  # réécrire entre le build et ce scan.
+  dependency-scan-image:
+    name: Dependency scan (image)
+    needs: docker-build-staging
+    permissions:
+      contents: read
+      packages: read
+    uses: instamedsolutions/.github/.github/workflows/dependency-scan.yml@main
+    with:
+      trivy-image-ref: 'ghcr.io/instamedsolutions/documenso@${{ needs.docker-build-staging.outputs.digest }}'
+      trivy-registry: 'ghcr.io'
+      trivy-registry-username: ${{ github.actor }}
+    secrets:
+      trivy-registry-password: ${{ secrets.GITHUB_TOKEN }}
+
   # Mirror the image just pushed to ghcr into Amazon ECR, so ECS pulls it over
   # the VPC's ECR interface endpoints instead of ghcr.io over the NAT Gateway.
   # Retag (pull + tag + push) rather than rebuild - the Next.js build already
-  # ran in docker-build-staging.
+  # ran in docker-build-staging. dependency-scan-image only orders the scan
+  # before the mirror; it never blocks the deploy since the scan itself is
+  # informative (continue-on-error) - the image scanned here (ghcr, pre-mirror)
+  # is the same one deployed, since the mirror step never rebuilds it.
   ecr-deploy:
     name: Mirror Staging Image to ECR
-    needs: docker-build-staging
+    needs: [docker-build-staging, dependency-scan-image]
     runs-on: ubuntu-latest
     permissions:
       id-token: write
