@@ -32,6 +32,11 @@ inputs:
     required: false
     default: ''
 
+outputs:
+  digest:
+    description: "Digest (sha256:...) de l'image poussée."
+    value: ${{ steps.build.outputs.digest }}
+
 runs:
   using: composite
   steps:
@@ -54,6 +59,7 @@ runs:
       uses: docker/setup-buildx-action@v3
 
     - name: Build and push image
+      id: build
       uses: docker/build-push-action@v6
       with:
         context: .
