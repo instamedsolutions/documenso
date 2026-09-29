@@ -2097,6 +2097,14 @@ msgstr "Assisting"
 msgid "At least one signature type must be enabled"
 msgstr "At least one signature type must be enabled"
 
+#: apps/remix/app/components/general/admin-global-settings-section.tsx
+msgid "Attach completed document"
+msgstr "Attach completed document"
+
+#: packages/ui/components/document/document-email-checkboxes.tsx
+msgid "Attach completed documents to completion emails"
+msgstr "Attach completed documents to completion emails"
+
 #: apps/remix/app/components/general/document/document-attachments-popover.tsx
 #: apps/remix/app/components/general/document/embedded-editor-attachment-popover.tsx
 msgid "Attachment added successfully."
@@ -2762,6 +2770,10 @@ msgstr "Completed At"
 #: packages/email/templates/document-self-signed.tsx
 msgid "Completed Document"
 msgstr "Completed Document"
+
+#: packages/ui/components/document/document-email-checkboxes.tsx
+msgid "Completed document attachments"
+msgstr "Completed document attachments"
 
 #: apps/remix/app/components/general/app-command-menu.tsx
 msgid "Completed documents"
@@ -12675,6 +12687,10 @@ msgstr "Were you trying to edit this document instead?"
 #: apps/remix/app/routes/_authenticated+/o.$orgUrl._index.tsx
 msgid "What you can do with teams:"
 msgstr "What you can do with teams:"
+
+#: packages/ui/components/document/document-email-checkboxes.tsx
+msgid "When enabled, completion emails include the finalized PDF as an attachment for recipients and the document owner."
+msgstr "When enabled, completion emails include the finalized PDF as an attachment for recipients and the document owner."
 
 #: apps/remix/app/components/embed/authoring/configure-document-recipients.tsx
 #: apps/remix/app/components/general/envelope-editor/envelope-editor-recipient-form.tsx
