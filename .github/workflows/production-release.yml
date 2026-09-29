@@ -29,11 +29,14 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: 'production'
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Build production image
+        id: build
         uses: ./.github/actions/build-docker-image
         with:
           registry_username: ${{ github.actor }}
@@ -49,11 +52,14 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: 'production'
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Build tagged image
+        id: build
         uses: ./.github/actions/build-docker-image
         with:
           registry_username: ${{ github.actor }}
@@ -63,14 +69,126 @@ jobs:
           next_private_telemetry_key: ${{ secrets.NEXT_PRIVATE_TELEMETRY_KEY }}
           next_private_telemetry_host: ${{ secrets.NEXT_PRIVATE_TELEMETRY_HOST }}
 
+  # Scan informatif (continue-on-error / exit-code 0 côté workflow mutualisé) de
+  # l'image juste construite sur ghcr, avant le mirroring vers ECR. On cible le
+  # digest immuable plutôt que le tag mutable 'latest', qu'un autre run pourrait
+  # réécrire entre le build et ce scan.
+  # instamedsolutions/documenso is a public repo and cannot call a reusable
+  # workflow hosted in the private instamedsolutions/.github repo (GitHub
+  # rejects it outright: "Invalid workflow file: error parsing called
+  # workflow ... workflow was not found"). Inlined from the trivy job of
+  # instamedsolutions/.github's .github/workflows/dependency-scan.yml@main.
+  dependency-scan-image-latest:
+    name: Dependency scan (latest image)
+    needs: docker-build-production
+    if: github.ref_type == 'branch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - name: Log in to registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Advisory only: report findings without blocking the deploy. Pinned to
+      # an exact commit SHA (not a floating tag) per aquasecurity/trivy-action's
+      # own supply-chain-incident guidance.
+      - name: Run Trivy vulnerability scanner (advisory)
+        id: scan
+        continue-on-error: true
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: 'ghcr.io/instamedsolutions/documenso@${{ needs.docker-build-production.outputs.digest }}'
+          version: 'v0.70.0'
+          format: 'table'
+          output: 'trivy-results.txt'
+          exit-code: '0'
+          ignore-unfixed: true
+
+      - name: Summary
+        if: always()
+        env:
+          TRIVY_IMAGE_REF: 'ghcr.io/instamedsolutions/documenso@${{ needs.docker-build-production.outputs.digest }}'
+        run: |
+          echo "### Trivy image vulnerability scan (informatif)" >> "$GITHUB_STEP_SUMMARY"
+          echo "Image : \`$TRIVY_IMAGE_REF\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          if [ -s trivy-results.txt ]; then
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            cat trivy-results.txt >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Pas de sortie de scan trouvée (le scan a peut-être échoué à s'exécuter)." >> "$GITHUB_STEP_SUMMARY"
+          fi
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Ce scan est informatif : il ne bloque jamais le déploiement." >> "$GITHUB_STEP_SUMMARY"
+
+  # Même scan informatif, pour la variante image de tag (digest distinct de 'latest').
+  dependency-scan-image-tag:
+    name: Dependency scan (tag image)
+    needs: docker-build-tag
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - name: Log in to registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Advisory only: report findings without blocking the deploy. Pinned to
+      # an exact commit SHA (not a floating tag) per aquasecurity/trivy-action's
+      # own supply-chain-incident guidance.
+      - name: Run Trivy vulnerability scanner (advisory)
+        id: scan
+        continue-on-error: true
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: 'ghcr.io/instamedsolutions/documenso@${{ needs.docker-build-tag.outputs.digest }}'
+          version: 'v0.70.0'
+          format: 'table'
+          output: 'trivy-results.txt'
+          exit-code: '0'
+          ignore-unfixed: true
+
+      - name: Summary
+        if: always()
+        env:
+          TRIVY_IMAGE_REF: 'ghcr.io/instamedsolutions/documenso@${{ needs.docker-build-tag.outputs.digest }}'
+        run: |
+          echo "### Trivy image vulnerability scan (informatif)" >> "$GITHUB_STEP_SUMMARY"
+          echo "Image : \`$TRIVY_IMAGE_REF\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          if [ -s trivy-results.txt ]; then
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            cat trivy-results.txt >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Pas de sortie de scan trouvée (le scan a peut-être échoué à s'exécuter)." >> "$GITHUB_STEP_SUMMARY"
+          fi
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Ce scan est informatif : il ne bloque jamais le déploiement." >> "$GITHUB_STEP_SUMMARY"
+
   # Mirror the image just pushed to ghcr into Amazon ECR, so ECS pulls it over
   # the VPC's ECR interface endpoints instead of ghcr.io over the NAT Gateway.
   # Retag (pull + tag + push) rather than rebuild - the Next.js build already
   # ran in the docker-build-* job. One job per build variant so it mirrors the
   # same tag that was built (latest for a branch push, vX.Y.Z for a tag).
+  # dependency-scan-image-* only orders the scan before the mirror; it never
+  # blocks the deploy since the scan itself is informative (continue-on-error) -
+  # the image scanned here (ghcr, pre-mirror) is the same one deployed, since
+  # the mirror step never rebuilds it.
   ecr-deploy-latest:
     name: Mirror Latest Image to ECR
-    needs: docker-build-production
+    needs: [docker-build-production, dependency-scan-image-latest]
     if: github.ref_type == 'branch'
     runs-on: ubuntu-latest
     permissions:
@@ -95,7 +213,7 @@ jobs:
 
   ecr-deploy-tag:
     name: Mirror Tagged Image to ECR
-    needs: docker-build-tag
+    needs: [docker-build-tag, dependency-scan-image-tag]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
