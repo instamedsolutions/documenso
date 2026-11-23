@@ -16255,3 +16255,19 @@ msgstr ""
 #: packages/ui/primitives/signature-pad/signature-pad-upload.tsx
 msgid "Zoom out"
 msgstr ""
+
+#: apps/remix/app/components/general/admin-global-settings-section.tsx
+msgid "Attach completed document"
+msgstr ""
+
+#: packages/ui/components/document/document-email-checkboxes.tsx
+msgid "Attach completed documents to completion emails"
+msgstr ""
+
+#: packages/ui/components/document/document-email-checkboxes.tsx
+msgid "Completed document attachments"
+msgstr ""
+
+#: packages/ui/components/document/document-email-checkboxes.tsx
+msgid "When enabled, completion emails include the finalized PDF as an attachment for recipients and the document owner."
+msgstr ""

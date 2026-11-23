@@ -8725,3 +8725,19 @@ msgstr "Token-i juaj është krijuar me sukses! Sigurohuni që ta kopjoni pasi n
 msgid "Your tokens will be shown here once you create them."
 msgstr "Token-ët tuaj do të shfaqen këtu sapo t'i krijoni."
 
+
+#: apps/remix/app/components/general/admin-global-settings-section.tsx
+msgid "Attach completed document"
+msgstr ""
+
+#: packages/ui/components/document/document-email-checkboxes.tsx
+msgid "Attach completed documents to completion emails"
+msgstr ""
+
+#: packages/ui/components/document/document-email-checkboxes.tsx
+msgid "Completed document attachments"
+msgstr ""
+
+#: packages/ui/components/document/document-email-checkboxes.tsx
+msgid "When enabled, completion emails include the finalized PDF as an attachment for recipients and the document owner."
+msgstr ""
