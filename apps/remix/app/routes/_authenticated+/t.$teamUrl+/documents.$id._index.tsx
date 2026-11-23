@@ -160,6 +160,7 @@ export default function DocumentPage({ params }: Route.ComponentProps) {
               envelopeItems={envelope.envelopeItems}
               token={undefined}
               fields={envelope.fields}
+              contents={envelope.contents}
               signatures={fieldSignatures}
               recipients={envelope.recipients}
               overrideSettings={{
@@ -224,6 +225,7 @@ export default function DocumentPage({ params }: Route.ComponentProps) {
                 {match(envelope.status)
                   .with(DocumentStatus.COMPLETED, () => <Trans>This document has been signed by all recipients</Trans>)
                   .with(DocumentStatus.REJECTED, () => <Trans>This document has been rejected by a recipient</Trans>)
+                  .with(DocumentStatus.CANCELLED, () => <Trans>This document has been cancelled</Trans>)
                   .with(DocumentStatus.DRAFT, () => (
                     <Trans>This document is currently a draft and has not been sent</Trans>
                   ))

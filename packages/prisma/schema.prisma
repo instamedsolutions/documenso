@@ -220,16 +220,17 @@ enum ApiTokenAlgorithm {
 }
 
 model ApiToken {
-  id        Int               @id @default(autoincrement())
-  name      String
-  token     String            @unique
-  algorithm ApiTokenAlgorithm @default(SHA512)
-  expires   DateTime?
-  createdAt DateTime          @default(now())
-  userId    Int?
-  user      User?             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  teamId    Int
-  team      Team              @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  id         Int               @id @default(autoincrement())
+  name       String
+  token      String            @unique
+  algorithm  ApiTokenAlgorithm @default(SHA512)
+  expires    DateTime?
+  createdAt  DateTime          @default(now())
+  lastUsedAt DateTime?
+  userId     Int?
+  user       User?             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  teamId     Int
+  team       Team              @relation(fields: [teamId], references: [id], onDelete: Cascade)
 }
 
 enum SubscriptionStatus {
@@ -256,7 +257,7 @@ model Subscription {
   @@index([organisationId])
 }
 
-/// @zod.import(["import { ZClaimFlagsSchema } from '@documenso/lib/types/subscription';"])
+/// @zod.import(["import { ZClaimFlagsSchema, ZRateLimitArraySchema } from '@documenso/lib/types/subscription';"])
 model SubscriptionClaim {
   id        String   @id @default(cuid())
   createdAt DateTime @default(now())
@@ -265,14 +266,29 @@ model SubscriptionClaim {
   name   String
   locked Boolean @default(false)
 
-  teamCount         Int
-  memberCount       Int
-  envelopeItemCount Int
+  teamCount                 Int
+  memberCount               Int
+  envelopeItemCount         Int
+  recipientCount            Int
+  envelopeContentCount      Int
+  envelopeContentImageCount Int
 
   flags Json /// [ClaimFlags] @zod.custom.use(ZClaimFlagsSchema)
+
+  documentRateLimits Json /// [RateLimitArray] @zod.custom.use(ZRateLimitArraySchema)
+  documentQuota      Int?
+
+  emailRateLimits Json /// [RateLimitArray] @zod.custom.use(ZRateLimitArraySchema)
+  emailQuota      Int?
+
+  apiRateLimits Json /// [RateLimitArray] @zod.custom.use(ZRateLimitArraySchema)
+  apiQuota      Int?
+
+  emailTransportId String?
+  emailTransport   EmailTransport? @relation(fields: [emailTransportId], references: [id], onDelete: SetNull)
 }
 
-/// @zod.import(["import { ZClaimFlagsSchema } from '@documenso/lib/types/subscription';"])
+/// @zod.import(["import { ZClaimFlagsSchema, ZRateLimitArraySchema } from '@documenso/lib/types/subscription';"])
 model OrganisationClaim {
   id        String   @id
   createdAt DateTime @default(now())
@@ -281,11 +297,46 @@ model OrganisationClaim {
   originalSubscriptionClaimId String?
   organisation                Organisation?
 
-  teamCount         Int
-  memberCount       Int
-  envelopeItemCount Int
+  teamCount                 Int
+  memberCount               Int
+  envelopeItemCount         Int
+  recipientCount            Int
+  envelopeContentCount      Int
+  envelopeContentImageCount Int
 
   flags Json /// [ClaimFlags] @zod.custom.use(ZClaimFlagsSchema)
+
+  documentRateLimits Json /// [RateLimitArray] @zod.custom.use(ZRateLimitArraySchema)
+  documentQuota      Int?
+
+  emailRateLimits Json /// [RateLimitArray] @zod.custom.use(ZRateLimitArraySchema)
+  emailQuota      Int?
+
+  apiRateLimits Json /// [RateLimitArray] @zod.custom.use(ZRateLimitArraySchema)
+  apiQuota      Int?
+
+  emailTransportId String?
+  emailTransport   EmailTransport? @relation(fields: [emailTransportId], references: [id], onDelete: SetNull)
+}
+
+model OrganisationMonthlyStat {
+  id        String   @id
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organisationId String
+  organisation   Organisation @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+
+  /// UTC calendar month in `YYYY-MM` form, e.g. "2026-05".
+  period String
+
+  documentCount Int @default(0)
+  emailCount    Int @default(0)
+  apiCount      Int @default(0)
+  emailReports  Int @default(0)
+
+  @@unique([organisationId, period])
+  @@index([organisationId])
 }
 
 model Account {
@@ -325,10 +376,24 @@ model Session {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  isEmbed Boolean @default(false)
+
   user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([sessionToken])
+}
+
+// Short-lived, nonce-keyed relay of a secret between two browsing contexts.
+// `id` is sha256(nonce), `type` is AUTH_HANDOFF_TYPE, `payload` is encrypted JSON.
+model AuthHandoff {
+  id        String   @id
+  type      String
+  payload   String
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+
+  @@index([expiresAt])
 }
 
 enum DocumentStatus {
@@ -336,6 +401,7 @@ enum DocumentStatus {
   PENDING
   COMPLETED
   REJECTED
+  CANCELLED
 }
 
 enum DocumentSource {
@@ -383,7 +449,7 @@ enum EnvelopeType {
   TEMPLATE
 }
 
-/// @zod.import(["import { ZDocumentAuthOptionsSchema } from '@documenso/lib/types/document-auth';", "import { ZDocumentFormValuesSchema } from '@documenso/lib/types/document-form-values';"])
+/// @zod.import(["import { ZDocumentAuthOptionsSchema } from '@documenso/lib/types/document-auth';", "import { ZDocumentFormValuesSchema } from '@documenso/lib/types/document-form-values';", "import { ZSignatureLevelSchema } from '@documenso/lib/types/signature-level';"])
 model Envelope {
   id          String  @id
   secondaryId String  @unique
@@ -401,12 +467,15 @@ model Envelope {
   source  DocumentSource
   qrToken String? /// @zod.string.describe("The token for viewing the document using the QR code on the certificate.")
 
+  signatureLevel String /// [SignatureLevel] @zod.custom.use(ZSignatureLevelSchema)
+
   internalVersion         Int
   useLegacyFieldInsertion Boolean @default(false)
 
   envelopeItems EnvelopeItem[]
   recipients    Recipient[]
   fields        Field[]
+  contents      EnvelopeContent[]
   shareLinks    DocumentShareLink[]
   auditLogs     DocumentAuditLog[]
 
@@ -458,7 +527,8 @@ model EnvelopeItem {
   envelopeId String
   envelope   Envelope @relation(fields: [envelopeId], references: [id], onDelete: Cascade)
 
-  field Field[]
+  field    Field[]
+  contents EnvelopeContent[]
 
   @@unique([documentDataId])
   @@index([envelopeId])
@@ -593,6 +663,7 @@ model Recipient {
   signedAt             DateTime?
   lastReminderSentAt   DateTime?
   nextReminderAt       DateTime?
+  reminderCount        Int           @default(0)
   authOptions          Json? /// [RecipientAuthOptions] @zod.custom.use(ZRecipientAuthOptionsSchema)
   signingOrder         Int? /// @zod.number.describe("The order in which the recipient should sign the document. Only works if the document is set to sequential signing.")
   rejectionReason      String?
@@ -603,6 +674,9 @@ model Recipient {
   envelope             Envelope      @relation(fields: [envelopeId], references: [id], onDelete: Cascade)
   fields               Field[]
   signatures           Signature[]
+
+  cscCredential CscCredential?
+  cscSession    CscSession?
 
   @@index([token])
   @@index([email])
@@ -657,6 +731,41 @@ model Field {
   @@index([recipientId])
 }
 
+/// @zod.import(["import { ZEnvelopeContentMetaSchema } from '@documenso/lib/types/envelope-content-meta';"])
+model EnvelopeContent {
+  id             String @id
+  envelopeId     String
+  envelopeItemId String
+
+  envelopeItem EnvelopeItem @relation(fields: [envelopeItemId], references: [id], onDelete: Cascade)
+  envelope     Envelope     @relation(fields: [envelopeId], references: [id], onDelete: Cascade)
+
+  contentMeta Json /// [EnvelopeContentMeta] @zod.custom.use(ZEnvelopeContentMetaSchema)
+
+  /// Any number of contents may point at the same data content, e.g. a
+  /// document created from a template shares the template's images.
+  dataContentId String?
+  dataContent   DataContent? @relation(fields: [dataContentId], references: [id], onDelete: SetNull)
+
+  @@index([envelopeId])
+  @@index([envelopeItemId])
+}
+
+/// Generic stored data (e.g. an uploaded image) which other models reference.
+/// The kind of data and its kind specific details live in `metadata`.
+/// @zod.import(["import { ZDataContentMetaSchema } from '@documenso/lib/types/data-content-meta';"])
+model DataContent {
+  id String @id
+
+  /// How `data` is stored, e.g. an S3 path or inline bytes.
+  type DocumentDataType
+  data String
+
+  metadata Json /// [DataContentMeta] @zod.custom.use(ZDataContentMetaSchema)
+
+  envelopeContents EnvelopeContent[]
+}
+
 model Signature {
   id                     Int      @id @default(autoincrement())
   created                DateTime @default(now())
@@ -669,6 +778,72 @@ model Signature {
   field     Field     @relation(fields: [fieldId], references: [id], onDelete: Cascade)
 
   @@index([recipientId])
+}
+
+/// Per-recipient cached credential metadata for the configured Cloud Signature
+/// Consortium (CSC) provider. Holds the TSP-validated certificate chain and the
+/// symmetric-encrypted service-scope access token. One row per recipient on a
+/// CSC envelope; absent for SES recipients.
+model CscCredential {
+  id           String @id @default(cuid())
+  providerId   String
+  credentialId String
+
+  /// TSP-validated certificate chain (length-prefixed). Nullable until the
+  /// service-scope OAuth callback successfully retrieves and validates it.
+  certCache Bytes?
+
+  /// Algorithm metadata derived from the CSC `credentials/info` response.
+  /// Held as flat scalars so each is independently queryable.
+  signatureAlgorithm String
+  keyType            String
+  digestAlgorithm    String
+  keyLenBits         Int?
+  signAlgoParams     String?
+
+  /// Service-scope access token, symmetric-encrypted at the application layer
+  /// before persistence. Nullable until the service-scope OAuth callback runs.
+  serviceTokenCiphertext Bytes?
+  serviceTokenExpiresAt  DateTime?
+
+  recipientId Int       @unique
+  recipient   Recipient @relation(fields: [recipientId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+/// Per-recipient transient sign-time state held across the credential-scope
+/// OAuth round-trip. The `recipientId @unique` constraint caps each recipient
+/// to at most one in-flight session — re-clicking Sign UPSERTs the row.
+/// Cleaned up transitively when the Recipient is deleted.
+/// @zod.import(["import { ZCscSessionItemsSchema } from '@documenso/lib/types/csc-session';"])
+model CscSession {
+  id String @id @default(cuid())
+
+  /// Denormalised envelope id for ergonomic lookups. No FK relation — cleanup
+  /// flows through the Recipient cascade.
+  envelopeId String
+
+  /// Pinned at prep time; stable across overlay re-renders so the captured
+  /// signedAttrs digest matches the bytes the TSP signs.
+  signingTime DateTime
+
+  /// Contract between prep and sign: an array of
+  /// `{ envelopeItemId, documentDataId, hashB64, ordinal }` per envelope item.
+  /// `documentDataId` pins the immutable bytes that produced the captured
+  /// digest so sign-time can re-derive the same hash against the same content.
+  itemsJson Json /// [CscSessionItems] @zod.custom.use(ZCscSessionItemsSchema)
+
+  /// Populated by the credential-scope OAuth callback. Both nullable at row
+  /// creation; set together when the SAD is exchanged.
+  encryptedSad Bytes?
+  sadExpiresAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  recipientId Int       @unique
+  recipient   Recipient @relation(fields: [recipientId], references: [id], onDelete: Cascade)
 }
 
 model DocumentShareLink {
@@ -713,6 +888,10 @@ model Organisation {
 
   emailDomains       EmailDomain[]
   organisationEmails OrganisationEmail[]
+
+  monthlyStats OrganisationMonthlyStat[]
+
+  embedSignatures EmbedSignature[]
 
   avatarImage AvatarImage? @relation(fields: [avatarImageId], references: [id], onDelete: SetNull)
 
@@ -1094,6 +1273,32 @@ model OrganisationEmail {
   teamGlobalSettings         TeamGlobalSettings[]
 }
 
+enum EmailTransportType {
+  SMTP_AUTH
+  SMTP_API
+  RESEND
+  MAILCHANNELS
+}
+
+model EmailTransport {
+  id        String   @id
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  name String
+  type EmailTransportType
+
+  // Required from-address override (plaintext, non-secret).
+  fromName    String
+  fromAddress String
+
+  // Encrypted JSON blob of the full transport config (secrets + non-secrets).
+  config String
+
+  subscriptionClaims SubscriptionClaim[]
+  organisationClaims OrganisationClaim[]
+}
+
 model OrganisationAuthenticationPortal {
   id           String        @id
   organisation Organisation?
@@ -1113,6 +1318,26 @@ model OrganisationAuthenticationPortal {
 model Counter {
   id    String @id
   value Int
+}
+
+/// `key` is sha256(organisationId:lower(recipientEmail):clientUserId) so neither
+/// the recipient email nor the embedder's identifier is stored in plaintext.
+model EmbedSignature {
+  key       String   @id
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organisationId String
+  organisation   Organisation @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+
+  /// Last writer. Not a relation so the row survives document deletion and
+  /// remains useful for abuse tracing.
+  recipientId Int
+
+  signature String
+
+  @@index([organisationId])
+  @@index([recipientId])
 }
 
 model RateLimit {

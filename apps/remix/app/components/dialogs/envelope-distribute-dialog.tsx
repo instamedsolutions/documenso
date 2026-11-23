@@ -1,13 +1,17 @@
+import { useAnalytics } from '@documenso/lib/client-only/hooks/use-analytics';
 import { useCurrentEnvelopeEditor } from '@documenso/lib/client-only/providers/envelope-editor-provider';
 import { useCurrentOrganisation } from '@documenso/lib/client-only/providers/organisation';
 import { DO_NOT_INVALIDATE_QUERY_ON_MUTATION } from '@documenso/lib/constants/trpc';
+import { AppError } from '@documenso/lib/errors/app-error';
 import { extractDocumentAuthMethods } from '@documenso/lib/utils/document-auth';
+import { getContentsMissingImages, resolveEnvelopeContentLimits } from '@documenso/lib/utils/envelope-content';
+import { hasOverlappingFields } from '@documenso/lib/utils/fields-overlap';
 import { getRecipientsWithMissingFields } from '@documenso/lib/utils/recipients';
 import { zEmail } from '@documenso/lib/utils/zod';
 import { trpc, trpc as trpcReact } from '@documenso/trpc/react';
 import { DocumentSendEmailMessageHelper } from '@documenso/ui/components/document/document-send-email-message-helper';
 import { cn } from '@documenso/ui/lib/utils';
-import { Alert, AlertDescription } from '@documenso/ui/primitives/alert';
+import { Alert, AlertDescription, AlertTitle } from '@documenso/ui/primitives/alert';
 import { Button } from '@documenso/ui/primitives/button';
 import {
   Dialog,
@@ -28,15 +32,16 @@ import { Textarea } from '@documenso/ui/primitives/textarea';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@documenso/ui/primitives/tooltip';
 import { useToast } from '@documenso/ui/primitives/use-toast';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Trans, useLingui } from '@lingui/react/macro';
+import { Plural, Trans, useLingui } from '@lingui/react/macro';
 import { DocumentDistributionMethod, DocumentStatus, EnvelopeType } from '@prisma/client';
 import { AnimatePresence, motion } from 'framer-motion';
-import { InfoIcon } from 'lucide-react';
+import { AlertTriangleIcon, InfoIcon } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useNavigate } from 'react-router';
 import { match } from 'ts-pattern';
 import * as z from 'zod';
+import { getDistributeErrorMessage } from '~/utils/toast-error-messages';
 
 export type EnvelopeDistributeDialogProps = {
   onDistribute?: () => Promise<void>;
@@ -66,8 +71,9 @@ export const EnvelopeDistributeDialog = ({
   const { envelope, syncEnvelope, isAutosaving, autosaveError } = useCurrentEnvelopeEditor();
 
   const { toast } = useToast();
-  const { t } = useLingui();
+  const { t, i18n } = useLingui();
   const navigate = useNavigate();
+  const analytics = useAnalytics();
 
   const [isOpen, setIsOpen] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -136,6 +142,40 @@ export const EnvelopeDistributeDialog = ({
     });
   }, [recipientsWithIndex, envelope.authOptions]);
 
+  /**
+   * Whether any fields significantly overlap each other. This is surfaced as a
+   * non-blocking warning since overlapping fields still allow sending, but can
+   * complicate the signing process or cause fields to behave unexpectedly.
+   */
+  const hasOverlappingEnvelopeFields = useMemo(
+    () =>
+      hasOverlappingFields(
+        envelope.fields.map((field) => ({
+          id: field.id,
+          envelopeItemId: field.envelopeItemId,
+          page: field.page,
+          positionX: Number(field.positionX),
+          positionY: Number(field.positionY),
+          width: Number(field.width),
+          height: Number(field.height),
+        })),
+      ),
+    [envelope.fields],
+  );
+
+  const contentsMissingImages = useMemo(() => getContentsMissingImages(envelope.contents), [envelope.contents]);
+
+  // An envelope can exceed the plan's content limit without being edited, e.g.
+  // after the plan was lowered, so it is reported here rather than failing the send.
+  const contentLimits = useMemo(
+    () =>
+      resolveEnvelopeContentLimits(
+        envelope.contents.map((content) => content.contentMeta.type),
+        organisation.organisationClaim,
+      ),
+    [envelope.contents, organisation.organisationClaim],
+  );
+
   const invalidEnvelopeCode = useMemo(() => {
     if (recipientsMissingSignatureFields.length > 0) {
       return 'MISSING_SIGNATURES';
@@ -149,8 +189,26 @@ export const EnvelopeDistributeDialog = ({
       return 'MISSING_REQUIRED_EMAIL';
     }
 
+    if (contentsMissingImages.length > 0) {
+      return 'MISSING_CONTENT_IMAGES';
+    }
+
+    if (contentLimits.isContentLimitExceeded) {
+      return 'ENVELOPE_CONTENT_LIMIT_EXCEEDED';
+    }
+
+    if (contentLimits.isImageLimitExceeded) {
+      return 'ENVELOPE_CONTENT_IMAGE_LIMIT_EXCEEDED';
+    }
+
     return null;
-  }, [envelope.recipients, recipientsMissingRequiredEmail, recipientsMissingSignatureFields]);
+  }, [
+    envelope.recipients,
+    recipientsMissingRequiredEmail,
+    recipientsMissingSignatureFields,
+    contentsMissingImages,
+    contentLimits,
+  ]);
 
   const onFormSubmit = async ({ meta }: TEnvelopeDistributeFormSchema) => {
     try {
@@ -174,9 +232,19 @@ export const EnvelopeDistributeDialog = ({
 
       setIsOpen(false);
     } catch (err) {
+      const error = AppError.parseError(err);
+
+      analytics.captureException(err, {
+        source: 'editor',
+        location: 'distribute_document',
+        envelopeId: envelope.id,
+      });
+
+      const errorMessage = getDistributeErrorMessage(error.code);
+
       toast({
-        title: t`Something went wrong`,
-        description: t`This envelope could not be distributed at this time. Please try again.`,
+        title: i18n._(errorMessage.title),
+        description: i18n._(errorMessage.description),
         variant: 'destructive',
         duration: 7500,
       });
@@ -200,6 +268,11 @@ export const EnvelopeDistributeDialog = ({
   };
 
   useEffect(() => {
+    // Default the distribution method tab to the envelope's configured setting.
+    if (isOpen && envelope.documentMeta) {
+      setValue('meta.distributionMethod', envelope.documentMeta.distributionMethod);
+    }
+
     // Resync the whole envelope if the envelope is mid saving.
     if (isOpen && (isAutosaving || autosaveError)) {
       void handleSync();
@@ -229,6 +302,24 @@ export const EnvelopeDistributeDialog = ({
           <Form {...form}>
             <form onSubmit={handleSubmit(onFormSubmit)}>
               <fieldset disabled={isSubmitting}>
+                {hasOverlappingEnvelopeFields && (
+                  <Alert variant="warning" className="mb-4 flex flex-row items-start gap-3">
+                    <AlertTriangleIcon className="mt-0.5 h-5 w-5 flex-shrink-0" />
+
+                    <div className="flex flex-col gap-1">
+                      <AlertTitle>
+                        <Trans>Overlapping fields detected</Trans>
+                      </AlertTitle>
+                      <AlertDescription>
+                        <Trans>
+                          Some fields are placed on top of each other. This may complicate the signing process or cause
+                          fields to not work as expected.
+                        </Trans>
+                      </AlertDescription>
+                    </div>
+                  </Alert>
+                )}
+
                 <Tabs
                   onValueChange={(value) =>
                     // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
@@ -459,6 +550,33 @@ export const EnvelopeDistributeDialog = ({
                         </li>
                       ))}
                     </ul>
+                  </AlertDescription>
+                ))
+                .with('MISSING_CONTENT_IMAGES', () => (
+                  <AlertDescription>
+                    <Plural
+                      value={contentsMissingImages.length}
+                      one="An image content has no image. Upload an image for it, or remove it."
+                      other="# image contents have no image. Upload an image for each, or remove them."
+                    />
+                  </AlertDescription>
+                ))
+                .with('ENVELOPE_CONTENT_LIMIT_EXCEEDED', () => (
+                  <AlertDescription>
+                    <Plural
+                      value={contentLimits.contentLimit}
+                      one="This envelope cannot have more than # content item. Remove some, or contact support if you need more."
+                      other="This envelope cannot have more than # content items. Remove some, or contact support if you need more."
+                    />
+                  </AlertDescription>
+                ))
+                .with('ENVELOPE_CONTENT_IMAGE_LIMIT_EXCEEDED', () => (
+                  <AlertDescription>
+                    <Plural
+                      value={contentLimits.imageLimit}
+                      one="This envelope cannot have more than # image content item. Remove some, or contact support if you need more."
+                      other="This envelope cannot have more than # image content items. Remove some, or contact support if you need more."
+                    />
                   </AlertDescription>
                 ))
                 .exhaustive()}

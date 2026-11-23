@@ -1,5 +1,5 @@
 import { useCurrentEnvelopeEditor } from '@documenso/lib/client-only/providers/envelope-editor-provider';
-import { getEnvelopeItemPermissions, mapSecondaryIdToTemplateId } from '@documenso/lib/utils/envelope';
+import { getEnvelopeItemPermissions } from '@documenso/lib/utils/envelope';
 import { Badge } from '@documenso/ui/primitives/badge';
 import { Button } from '@documenso/ui/primitives/button';
 import { Separator } from '@documenso/ui/primitives/separator';
@@ -148,6 +148,11 @@ export default function EnvelopeEditorHeader() {
                     <Trans>Rejected</Trans>
                   </Badge>
                 ))
+                .with(DocumentStatus.CANCELLED, () => (
+                  <Badge variant="destructive" className="shrink-0">
+                    <Trans>Cancelled</Trans>
+                  </Badge>
+                ))
                 .exhaustive()}
 
             {autosaveError && (
@@ -217,7 +222,6 @@ export default function EnvelopeEditorHeader() {
             .with({ isEmbedded: false, isTemplate: true, allowDistributing: true }, () => (
               <TemplateUseDialog
                 envelopeId={envelope.id}
-                templateId={mapSecondaryIdToTemplateId(envelope.secondaryId)}
                 templateSigningOrder={envelope.documentMeta?.signingOrder}
                 recipients={envelope.recipients}
                 documentRootPath={relativePath.documentRootPath}

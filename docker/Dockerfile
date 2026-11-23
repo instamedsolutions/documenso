@@ -2,7 +2,7 @@
 #     BASE CONTAINER      #
 ###########################
 # Figée en tag@digest (scripts/check-base-images.py), mise à jour par Renovate (renovate.json).
-FROM node:22.22.3-alpine3.22@sha256:cd7807368cf24826297cbad5dca1a44972ccfd770647db52a8c7589eb4599ac8 AS base
+FROM node:24.22.3-alpine3.23@sha256:3946fb783fdce8a2812136ea694bc95c698c4f4096f3fd18568dc27a8ac389dc AS base
 
 RUN apk add --no-cache openssl
 RUN apk add --no-cache font-freefont
@@ -20,7 +20,10 @@ WORKDIR /app
 
 COPY . .
 
-RUN npm install -g "turbo@^1.9.3"
+# Install the exact turbo version resolved in the lockfile, without installing
+# the rest of the dependency tree (prune must run before any npm ci).
+RUN TURBO_VERSION="$(jq -r '.packages["node_modules/turbo"].version' package-lock.json)" \
+    && npm install -g "turbo@${TURBO_VERSION}"
 
 # Outputs to the /out folder
 # source: https://turbo.build/repo/docs/reference/command-line-reference/prune#--docker
@@ -40,9 +43,9 @@ RUN apk add --no-cache make cmake g++ openssl bash
 WORKDIR /app
 
 # Disable husky from installing hooks
-ENV HUSKY 0
-ENV DOCKER_OUTPUT 1
-ENV NEXT_TELEMETRY_DISABLED 1
+ENV HUSKY=0
+ENV DOCKER_OUTPUT=1
+ENV NEXT_TELEMETRY_DISABLED=1
 
 # Encryption keys
 ARG NEXT_PRIVATE_ENCRYPTION_KEY="CAFEBABE"
@@ -50,6 +53,12 @@ ENV NEXT_PRIVATE_ENCRYPTION_KEY="$NEXT_PRIVATE_ENCRYPTION_KEY"
 
 ARG NEXT_PRIVATE_ENCRYPTION_SECONDARY_KEY="DEADBEEF"
 ENV NEXT_PRIVATE_ENCRYPTION_SECONDARY_KEY="$NEXT_PRIVATE_ENCRYPTION_SECONDARY_KEY"
+
+# Sub-path the app is served under (e.g. "/ESign"). Empty = root.
+# Baked into the client bundle by Vite/React Router at build time; also
+# required at runtime for SSR so window.__ENV__ exposes it to the client.
+ARG NEXT_PUBLIC_BASE_PATH=""
+ENV NEXT_PUBLIC_BASE_PATH="$NEXT_PUBLIC_BASE_PATH"
 
 # Telemetry credentials (optional, baked into image at build time)
 ARG NEXT_PRIVATE_TELEMETRY_KEY=""
@@ -80,17 +89,17 @@ COPY --from=builder /app/out/full/ .
 # Finally copy the turbo.json file so that we can run turbo commands
 COPY turbo.json turbo.json
 
-RUN npm install -g "turbo@^1.9.3"
+ENV NODE_OPTIONS="--max-old-space-size=8192"
 
-RUN turbo run build --filter=@documenso/remix...
+RUN npx turbo run build --filter=@documenso/remix...
 
 ###########################
 #     RUNNER CONTAINER    #
 ###########################
 FROM base AS runner
 
-ENV HUSKY 0
-ENV DOCKER_OUTPUT 1
+ENV HUSKY=0
+ENV DOCKER_OUTPUT=1
 
 # Telemetry credentials (baked into image at build time, can be disabled at runtime)
 ARG NEXT_PRIVATE_TELEMETRY_KEY=""
@@ -113,7 +122,16 @@ COPY --from=builder --chown=nodejs:nodejs /app/out/full/packages/tailwind-config
 # Copy the patches across
 COPY --from=builder --chown=nodejs:nodejs /app/patches ./patches
 
-RUN npm ci --only=production
+RUN npm ci --omit=dev --no-audit --no-fund && npm cache clean --force
+
+# Strip build-time residue that ships as production dependencies but is never
+# executed at runtime.
+RUN rm -rf \
+    node_modules/react-email/dist/cli \
+    node_modules/esbuild \
+    node_modules/@esbuild \
+    node_modules/.bin/esbuild \
+    node_modules/.bin/email
 
 # Automatically leverage output traces to reduce image size
 # https://nodejs.org/docs/advanced-features/output-file-tracing
@@ -124,8 +142,9 @@ COPY --from=installer --chown=nodejs:nodejs /app/apps/remix/public ./apps/remix/
 COPY --from=installer --chown=nodejs:nodejs /app/packages/prisma/schema.prisma ./packages/prisma/schema.prisma
 COPY --from=installer --chown=nodejs:nodejs /app/packages/prisma/migrations ./packages/prisma/migrations
 
-# Generate the prisma client again
-RUN npx prisma generate --schema ./packages/prisma/schema.prisma
+# Generate the prisma client again, this time only targeting the client generator
+RUN npx prisma generate --schema ./packages/prisma/schema.prisma --generator client \
+    && npm cache clean --force
 
 
 # Get the start script from docker/

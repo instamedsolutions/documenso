@@ -12,7 +12,7 @@ import { uploadS3File } from './server-actions';
 type File = {
   name: string;
   type: string;
-  arrayBuffer: () => Promise<ArrayBuffer>;
+  arrayBuffer: () => Promise<ArrayBuffer | Uint8Array>;
 };
 
 /**
@@ -48,26 +48,40 @@ export const putPdfFileServerSide = async (file: File, initialData?: string) => 
   };
 };
 
+type PutNormalizedPdfFileOptions = {
+  flattenForm?: boolean;
+  initialData?: string;
+};
+
 /**
  * Uploads a pdf file and normalizes it.
  */
-export const putNormalizedPdfFileServerSide = async (file: File, options: { flattenForm?: boolean } = {}) => {
+export const putNormalizedPdfFileServerSide = async (
+  file: File,
+  { initialData, ...normalizePdfOptions }: PutNormalizedPdfFileOptions = {},
+) => {
   const buffer = Buffer.from(await file.arrayBuffer());
 
-  const normalized = await normalizePdf(buffer, options);
+  const { pdf: normalized, pageCount } = await normalizePdf(buffer, normalizePdfOptions);
 
   const fileName = file.name.endsWith('.pdf') ? file.name : `${file.name}.pdf`;
 
-  const documentData = await putFileServerSide({
+  const uploadedFile = await putFileServerSide({
     name: fileName,
     type: 'application/pdf',
     arrayBuffer: async () => Promise.resolve(normalized),
   });
 
-  return await createDocumentData({
-    type: documentData.type,
-    data: documentData.data,
+  const documentData = await createDocumentData({
+    type: uploadedFile.type,
+    data: uploadedFile.data,
+    initialData,
   });
+
+  return {
+    documentData,
+    filePageCount: pageCount,
+  };
 };
 
 /**
@@ -77,7 +91,8 @@ export const putFileServerSide = async (file: File) => {
   const NEXT_PUBLIC_UPLOAD_TRANSPORT = env('NEXT_PUBLIC_UPLOAD_TRANSPORT');
 
   return await match(NEXT_PUBLIC_UPLOAD_TRANSPORT)
-    .with('s3', async () => putFileInS3(file))
+    .with('s3', async () => putFileInObjectStorage(file))
+    .with('azure-blob', async () => putFileInObjectStorage(file))
     .otherwise(async () => putFileInDatabase(file));
 };
 
@@ -94,7 +109,7 @@ const putFileInDatabase = async (file: File) => {
   };
 };
 
-const putFileInS3 = async (file: File) => {
+const putFileInObjectStorage = async (file: File) => {
   const buffer = await file.arrayBuffer();
 
   const blob = new Blob([buffer], { type: file.type });

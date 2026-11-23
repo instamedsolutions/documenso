@@ -1,4 +1,9 @@
-import { isEmailDomainAllowedForSignup, isSignupEnabledForProvider } from '@documenso/lib/constants/auth';
+import {
+  isDisposableEmail,
+  isEmailDomainAllowedForSignup,
+  isSigninEnabledForProvider,
+  isSignupEnabledForProvider,
+} from '@documenso/lib/constants/auth';
 import { EMAIL_VERIFICATION_STATE } from '@documenso/lib/constants/email';
 import { AppError } from '@documenso/lib/errors/app-error';
 import { jobsClient } from '@documenso/lib/jobs/client';
@@ -16,8 +21,10 @@ import {
   resendVerifyEmailRateLimit,
   resetPasswordRateLimit,
   signupRateLimit,
+  updatePasswordRateLimit,
   verifyEmailRateLimit,
 } from '@documenso/lib/server-only/rate-limit/rate-limits';
+import { getEmailBlocklistDomains } from '@documenso/lib/server-only/site-settings/get-email-blocklist-domains';
 import { createUser } from '@documenso/lib/server-only/user/create-user';
 import { forgotPassword } from '@documenso/lib/server-only/user/forgot-password';
 import { getMostRecentEmailVerificationToken } from '@documenso/lib/server-only/user/get-most-recent-email-verification-token';
@@ -59,11 +66,17 @@ export const emailPasswordRoute = new Hono<HonoAuthContext>()
   .post('/authorize', sValidator('json', ZSignInSchema), async (c) => {
     const requestMetadata = c.get('requestMetadata');
 
+    if (!isSigninEnabledForProvider('email')) {
+      throw new AppError(AuthenticationErrorCode.SigninDisabled, {
+        statusCode: 400,
+      });
+    }
+
     const { email, password, totpCode, backupCode, csrfToken, captchaToken } = c.req.valid('json');
 
     const loginLimitResult = await loginRateLimit.check({
       ip: requestMetadata.ipAddress ?? 'unknown',
-      identifier: email,
+      identifier: email.toLowerCase(),
     });
 
     const loginLimited = rateLimitResponse(c, loginLimitResult);
@@ -167,12 +180,8 @@ export const emailPasswordRoute = new Hono<HonoAuthContext>()
       });
     }
 
-    if (user.disabled) {
-      throw new AppError('ACCOUNT_DISABLED', {
-        message: 'Account disabled',
-      });
-    }
-
+    // The disabled check now lives inside `onAuthorize` so every sign-in path
+    // (password, passkey, OAuth, OIDC) shares the same enforcement.
     await onAuthorize({ userId: user.id }, c);
 
     return c.text('', 201);
@@ -214,6 +223,14 @@ export const emailPasswordRoute = new Hono<HonoAuthContext>()
       });
     }
 
+    const additionalBlockedDomains = await getEmailBlocklistDomains();
+
+    if (isDisposableEmail(email, additionalBlockedDomains)) {
+      throw new AppError(AuthenticationErrorCode.SignupDisposableEmail, {
+        statusCode: 400,
+      });
+    }
+
     const user = await createUser({ name, email, password, signature }).catch((err) => {
       console.error(err);
       throw err;
@@ -232,15 +249,36 @@ export const emailPasswordRoute = new Hono<HonoAuthContext>()
    * Update password endpoint.
    */
   .post('/update-password', sValidator('json', ZUpdatePasswordSchema), async (c) => {
-    const { password, currentPassword } = c.req.valid('json');
+    const { password, currentPassword, totpCode, backupCode } = c.req.valid('json');
     const requestMetadata = c.get('requestMetadata');
 
+    if (!isSigninEnabledForProvider('email')) {
+      throw new AppError(AuthenticationErrorCode.SigninDisabled, {
+        statusCode: 400,
+      });
+    }
+
     const { session, user } = await getSession(c);
+
+    const updateLimitResult = await updatePasswordRateLimit.check({
+      ip: requestMetadata.ipAddress ?? 'unknown',
+      identifier: String(user.id),
+    });
+
+    const updateLimited = rateLimitResponse(c, updateLimitResult);
+
+    if (updateLimited) {
+      throw new HTTPException(429, {
+        res: updateLimited,
+      });
+    }
 
     await updatePassword({
       userId: user.id,
       password,
       currentPassword,
+      totpCode,
+      backupCode,
       requestMetadata,
     });
 
@@ -311,7 +349,7 @@ export const emailPasswordRoute = new Hono<HonoAuthContext>()
 
     const resendLimitResult = await resendVerifyEmailRateLimit.check({
       ip: requestMetadata.ipAddress ?? 'unknown',
-      identifier: email,
+      identifier: email.toLowerCase(),
     });
 
     const resendLimited = rateLimitResponse(c, resendLimitResult);
@@ -337,11 +375,17 @@ export const emailPasswordRoute = new Hono<HonoAuthContext>()
   .post('/forgot-password', sValidator('json', ZForgotPasswordSchema), async (c) => {
     const requestMetadata = c.get('requestMetadata');
 
+    if (!isSigninEnabledForProvider('email')) {
+      throw new AppError(AuthenticationErrorCode.SigninDisabled, {
+        statusCode: 400,
+      });
+    }
+
     const { email } = c.req.valid('json');
 
     const forgotLimitResult = await forgotPasswordRateLimit.check({
       ip: requestMetadata.ipAddress ?? 'unknown',
-      identifier: email,
+      identifier: email.toLowerCase(),
     });
 
     const forgotLimited = rateLimitResponse(c, forgotLimitResult);
@@ -367,6 +411,12 @@ export const emailPasswordRoute = new Hono<HonoAuthContext>()
    */
   .post('/reset-password', sValidator('json', ZResetPasswordSchema), async (c) => {
     const requestMetadata = c.get('requestMetadata');
+
+    if (!isSigninEnabledForProvider('email')) {
+      throw new AppError(AuthenticationErrorCode.SigninDisabled, {
+        statusCode: 400,
+      });
+    }
 
     const { token, password } = c.req.valid('json');
 

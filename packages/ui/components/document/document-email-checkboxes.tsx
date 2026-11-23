@@ -16,381 +16,403 @@ type DocumentEmailCheckboxesProps = {
   value: Value;
   onChange: (value: Value) => void;
   className?: string;
+  hiddenEvents?: readonly DocumentEmailEvents[];
 };
 
-export const DocumentEmailCheckboxes = ({ value, onChange, className }: DocumentEmailCheckboxesProps) => {
+export const DocumentEmailCheckboxes = ({ value, onChange, className, hiddenEvents }: DocumentEmailCheckboxesProps) => {
+  const isHidden = (event: DocumentEmailEvents) => hiddenEvents?.includes(event) ?? false;
   const normalizedValue = ZDocumentEmailSettingsSchema.parse(value);
 
   return (
     <div className={cn('space-y-3', className)}>
-      <div className="flex flex-row items-center">
-        <Checkbox
-          id={DocumentEmailEvents.RecipientSigned}
-          className="h-5 w-5"
-          checked={normalizedValue.recipientSigned}
-          onCheckedChange={(checked) =>
-            onChange({ ...normalizedValue, [DocumentEmailEvents.RecipientSigned]: Boolean(checked) })
-          }
-        />
+      {!isHidden(DocumentEmailEvents.RecipientSigned) && (
+        <div className="flex flex-row items-center">
+          <Checkbox
+            id={DocumentEmailEvents.RecipientSigned}
+            className="h-5 w-5"
+            checked={normalizedValue.recipientSigned}
+            onCheckedChange={(checked) =>
+              onChange({ ...normalizedValue, [DocumentEmailEvents.RecipientSigned]: Boolean(checked) })
+            }
+          />
 
-        <label
-          className="ml-2 flex flex-row items-center text-muted-foreground text-sm"
-          htmlFor={DocumentEmailEvents.RecipientSigned}
-        >
-          <Trans>Email the owner when a recipient signs</Trans>
+          <label
+            className="ml-2 flex flex-row items-center text-muted-foreground text-sm"
+            htmlFor={DocumentEmailEvents.RecipientSigned}
+          >
+            <Trans>Email the owner when a recipient signs</Trans>
 
-          <Tooltip>
-            <TooltipTrigger>
-              <InfoIcon className="mx-2 h-4 w-4" />
-            </TooltipTrigger>
+            <Tooltip>
+              <TooltipTrigger>
+                <InfoIcon className="mx-2 h-4 w-4" />
+              </TooltipTrigger>
 
-            <TooltipContent className="max-w-md space-y-2 p-4 text-foreground">
-              <h2>
-                <strong>
-                  <Trans>Recipient signed email</Trans>
-                </strong>
-              </h2>
+              <TooltipContent className="max-w-md space-y-2 p-4 text-foreground">
+                <h2>
+                  <strong>
+                    <Trans>Recipient signed email</Trans>
+                  </strong>
+                </h2>
 
-              <p>
-                <Trans>This email is sent to the document owner when a recipient has signed the document.</Trans>
-              </p>
-            </TooltipContent>
-          </Tooltip>
-        </label>
-      </div>
+                <p>
+                  <Trans>This email is sent to the document owner when a recipient has signed the document.</Trans>
+                </p>
+              </TooltipContent>
+            </Tooltip>
+          </label>
+        </div>
+      )}
 
-      <div className="flex flex-row items-center">
-        <Checkbox
-          id={DocumentEmailEvents.RecipientSigningRequest}
-          className="h-5 w-5"
-          checked={normalizedValue.recipientSigningRequest}
-          onCheckedChange={(checked) =>
-            onChange({ ...normalizedValue, [DocumentEmailEvents.RecipientSigningRequest]: Boolean(checked) })
-          }
-        />
+      {!isHidden(DocumentEmailEvents.RecipientSigningRequest) && (
+        <div className="flex flex-row items-center">
+          <Checkbox
+            id={DocumentEmailEvents.RecipientSigningRequest}
+            className="h-5 w-5"
+            checked={normalizedValue.recipientSigningRequest}
+            onCheckedChange={(checked) =>
+              onChange({ ...normalizedValue, [DocumentEmailEvents.RecipientSigningRequest]: Boolean(checked) })
+            }
+          />
 
-        <label
-          className="ml-2 flex flex-row items-center text-muted-foreground text-sm"
-          htmlFor={DocumentEmailEvents.RecipientSigningRequest}
-        >
-          <Trans>Email recipients with a signing request</Trans>
+          <label
+            className="ml-2 flex flex-row items-center text-muted-foreground text-sm"
+            htmlFor={DocumentEmailEvents.RecipientSigningRequest}
+          >
+            <Trans>Email recipients with a signing request</Trans>
 
-          <Tooltip>
-            <TooltipTrigger>
-              <InfoIcon className="mx-2 h-4 w-4" />
-            </TooltipTrigger>
+            <Tooltip>
+              <TooltipTrigger>
+                <InfoIcon className="mx-2 h-4 w-4" />
+              </TooltipTrigger>
 
-            <TooltipContent className="max-w-md space-y-2 p-4 text-foreground">
-              <h2>
-                <strong>
-                  <Trans>Recipient signing request email</Trans>
-                </strong>
-              </h2>
+              <TooltipContent className="max-w-md space-y-2 p-4 text-foreground">
+                <h2>
+                  <strong>
+                    <Trans>Recipient signing request email</Trans>
+                  </strong>
+                </h2>
 
-              <p>
-                <Trans>This email is sent to the recipient requesting them to sign the document.</Trans>
-              </p>
-            </TooltipContent>
-          </Tooltip>
-        </label>
-      </div>
+                <p>
+                  <Trans>This email is sent to the recipient requesting them to sign the document.</Trans>
+                </p>
+              </TooltipContent>
+            </Tooltip>
+          </label>
+        </div>
+      )}
 
-      <div className="flex flex-row items-center">
-        <Checkbox
-          id={DocumentEmailEvents.RecipientRemoved}
-          className="h-5 w-5"
-          checked={normalizedValue.recipientRemoved}
-          onCheckedChange={(checked) =>
-            onChange({ ...normalizedValue, [DocumentEmailEvents.RecipientRemoved]: Boolean(checked) })
-          }
-        />
+      {!isHidden(DocumentEmailEvents.RecipientRemoved) && (
+        <div className="flex flex-row items-center">
+          <Checkbox
+            id={DocumentEmailEvents.RecipientRemoved}
+            className="h-5 w-5"
+            checked={normalizedValue.recipientRemoved}
+            onCheckedChange={(checked) =>
+              onChange({ ...normalizedValue, [DocumentEmailEvents.RecipientRemoved]: Boolean(checked) })
+            }
+          />
 
-        <label
-          className="ml-2 flex flex-row items-center text-muted-foreground text-sm"
-          htmlFor={DocumentEmailEvents.RecipientRemoved}
-        >
-          <Trans>Email recipients when they're removed from a pending document</Trans>
+          <label
+            className="ml-2 flex flex-row items-center text-muted-foreground text-sm"
+            htmlFor={DocumentEmailEvents.RecipientRemoved}
+          >
+            <Trans>Email recipients when they're removed from a pending document</Trans>
 
-          <Tooltip>
-            <TooltipTrigger>
-              <InfoIcon className="mx-2 h-4 w-4" />
-            </TooltipTrigger>
+            <Tooltip>
+              <TooltipTrigger>
+                <InfoIcon className="mx-2 h-4 w-4" />
+              </TooltipTrigger>
 
-            <TooltipContent className="max-w-md space-y-2 p-4 text-foreground">
-              <h2>
-                <strong>
-                  <Trans>Recipient removed email</Trans>
-                </strong>
-              </h2>
+              <TooltipContent className="max-w-md space-y-2 p-4 text-foreground">
+                <h2>
+                  <strong>
+                    <Trans>Recipient removed email</Trans>
+                  </strong>
+                </h2>
 
-              <p>
-                <Trans>This email is sent to the recipient if they are removed from a pending document.</Trans>
-              </p>
-            </TooltipContent>
-          </Tooltip>
-        </label>
-      </div>
+                <p>
+                  <Trans>This email is sent to the recipient if they are removed from a pending document.</Trans>
+                </p>
+              </TooltipContent>
+            </Tooltip>
+          </label>
+        </div>
+      )}
 
-      <div className="flex flex-row items-center">
-        <Checkbox
-          id={DocumentEmailEvents.DocumentPending}
-          className="h-5 w-5"
-          checked={normalizedValue.documentPending}
-          onCheckedChange={(checked) =>
-            onChange({ ...normalizedValue, [DocumentEmailEvents.DocumentPending]: Boolean(checked) })
-          }
-        />
+      {!isHidden(DocumentEmailEvents.DocumentPending) && (
+        <div className="flex flex-row items-center">
+          <Checkbox
+            id={DocumentEmailEvents.DocumentPending}
+            className="h-5 w-5"
+            checked={normalizedValue.documentPending}
+            onCheckedChange={(checked) =>
+              onChange({ ...normalizedValue, [DocumentEmailEvents.DocumentPending]: Boolean(checked) })
+            }
+          />
 
-        <label
-          className="ml-2 flex flex-row items-center text-muted-foreground text-sm"
-          htmlFor={DocumentEmailEvents.DocumentPending}
-        >
-          <Trans>Email the signer if the document is still pending</Trans>
+          <label
+            className="ml-2 flex flex-row items-center text-muted-foreground text-sm"
+            htmlFor={DocumentEmailEvents.DocumentPending}
+          >
+            <Trans>Email the signer if the document is still pending</Trans>
 
-          <Tooltip>
-            <TooltipTrigger>
-              <InfoIcon className="mx-2 h-4 w-4" />
-            </TooltipTrigger>
+            <Tooltip>
+              <TooltipTrigger>
+                <InfoIcon className="mx-2 h-4 w-4" />
+              </TooltipTrigger>
 
-            <TooltipContent className="max-w-md space-y-2 p-4 text-foreground">
-              <h2>
-                <strong>
-                  <Trans>Document pending email</Trans>
-                </strong>
-              </h2>
+              <TooltipContent className="max-w-md space-y-2 p-4 text-foreground">
+                <h2>
+                  <strong>
+                    <Trans>Document pending email</Trans>
+                  </strong>
+                </h2>
 
-              <p>
-                <Trans>
-                  This email will be sent to the recipient who has just signed the document, if there are still other
-                  recipients who have not signed yet.
-                </Trans>
-              </p>
-            </TooltipContent>
-          </Tooltip>
-        </label>
-      </div>
+                <p>
+                  <Trans>
+                    This email will be sent to the recipient who has just signed the document, if there are still other
+                    recipients who have not signed yet.
+                  </Trans>
+                </p>
+              </TooltipContent>
+            </Tooltip>
+          </label>
+        </div>
+      )}
 
-      <div className="flex flex-row items-center">
-        <Checkbox
-          id={DocumentEmailEvents.DocumentCompleted}
-          className="h-5 w-5"
-          checked={normalizedValue.documentCompleted}
-          onCheckedChange={(checked) =>
-            onChange({ ...normalizedValue, [DocumentEmailEvents.DocumentCompleted]: Boolean(checked) })
-          }
-        />
+      {!isHidden(DocumentEmailEvents.DocumentCompleted) && (
+        <div className="flex flex-row items-center">
+          <Checkbox
+            id={DocumentEmailEvents.DocumentCompleted}
+            className="h-5 w-5"
+            checked={normalizedValue.documentCompleted}
+            onCheckedChange={(checked) =>
+              onChange({ ...normalizedValue, [DocumentEmailEvents.DocumentCompleted]: Boolean(checked) })
+            }
+          />
 
-        <label
-          className="ml-2 flex flex-row items-center text-muted-foreground text-sm"
-          htmlFor={DocumentEmailEvents.DocumentCompleted}
-        >
-          <Trans>Email recipients when the document is completed</Trans>
+          <label
+            className="ml-2 flex flex-row items-center text-muted-foreground text-sm"
+            htmlFor={DocumentEmailEvents.DocumentCompleted}
+          >
+            <Trans>Email recipients when the document is completed</Trans>
 
-          <Tooltip>
-            <TooltipTrigger>
-              <InfoIcon className="mx-2 h-4 w-4" />
-            </TooltipTrigger>
+            <Tooltip>
+              <TooltipTrigger>
+                <InfoIcon className="mx-2 h-4 w-4" />
+              </TooltipTrigger>
 
-            <TooltipContent className="max-w-md space-y-2 p-4 text-foreground">
-              <h2>
-                <strong>
-                  <Trans>Document completed email</Trans>
-                </strong>
-              </h2>
+              <TooltipContent className="max-w-md space-y-2 p-4 text-foreground">
+                <h2>
+                  <strong>
+                    <Trans>Document completed email</Trans>
+                  </strong>
+                </h2>
 
-              <p>
-                <Trans>This will be sent to all recipients once the document has been fully completed.</Trans>
-              </p>
-            </TooltipContent>
-          </Tooltip>
-        </label>
-      </div>
+                <p>
+                  <Trans>This will be sent to all recipients once the document has been fully completed.</Trans>
+                </p>
+              </TooltipContent>
+            </Tooltip>
+          </label>
+        </div>
+      )}
 
-      <div className="flex flex-row items-center">
-        <Checkbox
-          id={DocumentEmailEvents.AttachCompletedDocument}
-          className="h-5 w-5"
-          checked={normalizedValue.attachCompletedDocument}
-          onCheckedChange={(checked) =>
-            onChange({ ...normalizedValue, [DocumentEmailEvents.AttachCompletedDocument]: Boolean(checked) })
-          }
-        />
+      {!isHidden(DocumentEmailEvents.AttachCompletedDocument) && (
+        <div className="flex flex-row items-center">
+          <Checkbox
+            id={DocumentEmailEvents.AttachCompletedDocument}
+            className="h-5 w-5"
+            checked={normalizedValue.attachCompletedDocument}
+            onCheckedChange={(checked) =>
+              onChange({ ...normalizedValue, [DocumentEmailEvents.AttachCompletedDocument]: Boolean(checked) })
+            }
+          />
 
-        <label
-          className="ml-2 flex flex-row items-center text-muted-foreground text-sm"
-          htmlFor={DocumentEmailEvents.AttachCompletedDocument}
-        >
-          <Trans>Attach completed documents to completion emails</Trans>
+          <label
+            className="ml-2 flex flex-row items-center text-muted-foreground text-sm"
+            htmlFor={DocumentEmailEvents.AttachCompletedDocument}
+          >
+            <Trans>Attach completed documents to completion emails</Trans>
 
-          <Tooltip>
-            <TooltipTrigger>
-              <InfoIcon className="mx-2 h-4 w-4" />
-            </TooltipTrigger>
+            <Tooltip>
+              <TooltipTrigger>
+                <InfoIcon className="mx-2 h-4 w-4" />
+              </TooltipTrigger>
 
-            <TooltipContent className="max-w-md space-y-2 p-4 text-foreground">
-              <h2>
-                <strong>
-                  <Trans>Completed document attachments</Trans>
-                </strong>
-              </h2>
+              <TooltipContent className="max-w-md space-y-2 p-4 text-foreground">
+                <h2>
+                  <strong>
+                    <Trans>Completed document attachments</Trans>
+                  </strong>
+                </h2>
 
-              <p>
-                <Trans>
-                  When enabled, completion emails include the finalized PDF as an attachment for recipients and the
-                  document owner.
-                </Trans>
-              </p>
-            </TooltipContent>
-          </Tooltip>
-        </label>
-      </div>
+                <p>
+                  <Trans>
+                    When enabled, completion emails include the finalized PDF as an attachment for recipients and the
+                    document owner.
+                  </Trans>
+                </p>
+              </TooltipContent>
+            </Tooltip>
+          </label>
+        </div>
+      )}
 
-      <div className="flex flex-row items-center">
-        <Checkbox
-          id={DocumentEmailEvents.DocumentDeleted}
-          className="h-5 w-5"
-          checked={normalizedValue.documentDeleted}
-          onCheckedChange={(checked) =>
-            onChange({ ...normalizedValue, [DocumentEmailEvents.DocumentDeleted]: Boolean(checked) })
-          }
-        />
+      {!isHidden(DocumentEmailEvents.DocumentDeleted) && (
+        <div className="flex flex-row items-center">
+          <Checkbox
+            id={DocumentEmailEvents.DocumentDeleted}
+            className="h-5 w-5"
+            checked={normalizedValue.documentDeleted}
+            onCheckedChange={(checked) =>
+              onChange({ ...normalizedValue, [DocumentEmailEvents.DocumentDeleted]: Boolean(checked) })
+            }
+          />
 
-        <label
-          className="ml-2 flex flex-row items-center text-muted-foreground text-sm"
-          htmlFor={DocumentEmailEvents.DocumentDeleted}
-        >
-          <Trans>Email recipients when a pending document is deleted</Trans>
+          <label
+            className="ml-2 flex flex-row items-center text-muted-foreground text-sm"
+            htmlFor={DocumentEmailEvents.DocumentDeleted}
+          >
+            <Trans>Email recipients when a pending document is deleted</Trans>
 
-          <Tooltip>
-            <TooltipTrigger>
-              <InfoIcon className="mx-2 h-4 w-4" />
-            </TooltipTrigger>
+            <Tooltip>
+              <TooltipTrigger>
+                <InfoIcon className="mx-2 h-4 w-4" />
+              </TooltipTrigger>
 
-            <TooltipContent className="max-w-md space-y-2 p-4 text-foreground">
-              <h2>
-                <strong>
-                  <Trans>Document deleted email</Trans>
-                </strong>
-              </h2>
+              <TooltipContent className="max-w-md space-y-2 p-4 text-foreground">
+                <h2>
+                  <strong>
+                    <Trans>Document deleted email</Trans>
+                  </strong>
+                </h2>
 
-              <p>
-                <Trans>This will be sent to all recipients if a pending document has been deleted.</Trans>
-              </p>
-            </TooltipContent>
-          </Tooltip>
-        </label>
-      </div>
+                <p>
+                  <Trans>This will be sent to all recipients if a pending document has been deleted.</Trans>
+                </p>
+              </TooltipContent>
+            </Tooltip>
+          </label>
+        </div>
+      )}
 
-      <div className="flex flex-row items-center">
-        <Checkbox
-          id={DocumentEmailEvents.OwnerDocumentCompleted}
-          className="h-5 w-5"
-          checked={normalizedValue.ownerDocumentCompleted}
-          onCheckedChange={(checked) =>
-            onChange({ ...normalizedValue, [DocumentEmailEvents.OwnerDocumentCompleted]: Boolean(checked) })
-          }
-        />
+      {!isHidden(DocumentEmailEvents.OwnerDocumentCompleted) && (
+        <div className="flex flex-row items-center">
+          <Checkbox
+            id={DocumentEmailEvents.OwnerDocumentCompleted}
+            className="h-5 w-5"
+            checked={normalizedValue.ownerDocumentCompleted}
+            onCheckedChange={(checked) =>
+              onChange({ ...normalizedValue, [DocumentEmailEvents.OwnerDocumentCompleted]: Boolean(checked) })
+            }
+          />
 
-        <label
-          className="ml-2 flex flex-row items-center text-muted-foreground text-sm"
-          htmlFor={DocumentEmailEvents.OwnerDocumentCompleted}
-        >
-          <Trans>Email the owner when the document is completed</Trans>
+          <label
+            className="ml-2 flex flex-row items-center text-muted-foreground text-sm"
+            htmlFor={DocumentEmailEvents.OwnerDocumentCompleted}
+          >
+            <Trans>Email the owner when the document is completed</Trans>
 
-          <Tooltip>
-            <TooltipTrigger>
-              <InfoIcon className="mx-2 h-4 w-4" />
-            </TooltipTrigger>
+            <Tooltip>
+              <TooltipTrigger>
+                <InfoIcon className="mx-2 h-4 w-4" />
+              </TooltipTrigger>
 
-            <TooltipContent className="max-w-md space-y-2 p-4 text-foreground">
-              <h2>
-                <strong>
-                  <Trans>Document completed email</Trans>
-                </strong>
-              </h2>
+              <TooltipContent className="max-w-md space-y-2 p-4 text-foreground">
+                <h2>
+                  <strong>
+                    <Trans>Document completed email</Trans>
+                  </strong>
+                </h2>
 
-              <p>
-                <Trans>This will be sent to the document owner once the document has been fully completed.</Trans>
-              </p>
-            </TooltipContent>
-          </Tooltip>
-        </label>
-      </div>
+                <p>
+                  <Trans>This will be sent to the document owner once the document has been fully completed.</Trans>
+                </p>
+              </TooltipContent>
+            </Tooltip>
+          </label>
+        </div>
+      )}
 
-      <div className="flex flex-row items-center">
-        <Checkbox
-          id={DocumentEmailEvents.OwnerDocumentCreated}
-          className="h-5 w-5"
-          checked={normalizedValue.ownerDocumentCreated}
-          onCheckedChange={(checked) =>
-            onChange({ ...normalizedValue, [DocumentEmailEvents.OwnerDocumentCreated]: Boolean(checked) })
-          }
-        />
+      {!isHidden(DocumentEmailEvents.OwnerDocumentCreated) && (
+        <div className="flex flex-row items-center">
+          <Checkbox
+            id={DocumentEmailEvents.OwnerDocumentCreated}
+            className="h-5 w-5"
+            checked={normalizedValue.ownerDocumentCreated}
+            onCheckedChange={(checked) =>
+              onChange({ ...normalizedValue, [DocumentEmailEvents.OwnerDocumentCreated]: Boolean(checked) })
+            }
+          />
 
-        <label
-          className="ml-2 flex flex-row items-center text-muted-foreground text-sm"
-          htmlFor={DocumentEmailEvents.OwnerDocumentCreated}
-        >
-          <Trans>Email the owner when a document is created from a direct template</Trans>
+          <label
+            className="ml-2 flex flex-row items-center text-muted-foreground text-sm"
+            htmlFor={DocumentEmailEvents.OwnerDocumentCreated}
+          >
+            <Trans>Email the owner when a document is created from a direct template</Trans>
 
-          <Tooltip>
-            <TooltipTrigger>
-              <InfoIcon className="mx-2 h-4 w-4" />
-            </TooltipTrigger>
+            <Tooltip>
+              <TooltipTrigger>
+                <InfoIcon className="mx-2 h-4 w-4" />
+              </TooltipTrigger>
 
-            <TooltipContent className="max-w-md space-y-2 p-4 text-foreground">
-              <h2>
-                <strong>
-                  <Trans>Document created from direct template email</Trans>
-                </strong>
-              </h2>
+              <TooltipContent className="max-w-md space-y-2 p-4 text-foreground">
+                <h2>
+                  <strong>
+                    <Trans>Document created from direct template email</Trans>
+                  </strong>
+                </h2>
 
-              <p>
-                <Trans>
-                  This email is sent to the document owner when a recipient creates a document via a direct template
-                  link.
-                </Trans>
-              </p>
-            </TooltipContent>
-          </Tooltip>
-        </label>
-      </div>
+                <p>
+                  <Trans>
+                    This email is sent to the document owner when a recipient creates a document via a direct template
+                    link.
+                  </Trans>
+                </p>
+              </TooltipContent>
+            </Tooltip>
+          </label>
+        </div>
+      )}
 
-      <div className="flex flex-row items-center">
-        <Checkbox
-          id={DocumentEmailEvents.OwnerRecipientExpired}
-          className="h-5 w-5"
-          checked={normalizedValue.ownerRecipientExpired}
-          onCheckedChange={(checked) =>
-            onChange({ ...normalizedValue, [DocumentEmailEvents.OwnerRecipientExpired]: Boolean(checked) })
-          }
-        />
+      {!isHidden(DocumentEmailEvents.OwnerRecipientExpired) && (
+        <div className="flex flex-row items-center">
+          <Checkbox
+            id={DocumentEmailEvents.OwnerRecipientExpired}
+            className="h-5 w-5"
+            checked={normalizedValue.ownerRecipientExpired}
+            onCheckedChange={(checked) =>
+              onChange({ ...normalizedValue, [DocumentEmailEvents.OwnerRecipientExpired]: Boolean(checked) })
+            }
+          />
 
-        <label
-          className="ml-2 flex flex-row items-center text-muted-foreground text-sm"
-          htmlFor={DocumentEmailEvents.OwnerRecipientExpired}
-        >
-          <Trans>Send recipient expired email to the owner</Trans>
+          <label
+            className="ml-2 flex flex-row items-center text-muted-foreground text-sm"
+            htmlFor={DocumentEmailEvents.OwnerRecipientExpired}
+          >
+            <Trans>Send recipient expired email to the owner</Trans>
 
-          <Tooltip>
-            <TooltipTrigger>
-              <InfoIcon className="mx-2 h-4 w-4" />
-            </TooltipTrigger>
+            <Tooltip>
+              <TooltipTrigger>
+                <InfoIcon className="mx-2 h-4 w-4" />
+              </TooltipTrigger>
 
-            <TooltipContent className="max-w-md space-y-2 p-4 text-foreground">
-              <h2>
-                <strong>
-                  <Trans>Recipient expired email</Trans>
-                </strong>
-              </h2>
+              <TooltipContent className="max-w-md space-y-2 p-4 text-foreground">
+                <h2>
+                  <strong>
+                    <Trans>Recipient expired email</Trans>
+                  </strong>
+                </h2>
 
-              <p>
-                <Trans>This will be sent to the document owner when a recipient's signing window has expired.</Trans>
-              </p>
-            </TooltipContent>
-          </Tooltip>
-        </label>
-      </div>
+                <p>
+                  <Trans>This will be sent to the document owner when a recipient's signing window has expired.</Trans>
+                </p>
+              </TooltipContent>
+            </Tooltip>
+          </label>
+        </div>
+      )}
     </div>
   );
 };

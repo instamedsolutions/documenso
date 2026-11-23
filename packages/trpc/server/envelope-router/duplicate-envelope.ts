@@ -13,7 +13,7 @@ export const duplicateEnvelopeRoute = authenticatedProcedure
   .output(ZDuplicateEnvelopeResponseSchema)
   .mutation(async ({ input, ctx }) => {
     const { teamId } = ctx;
-    const { envelopeId } = input;
+    const { envelopeId, includeRecipients, includeFields, includeContents } = input;
 
     ctx.logger.info({
       input: {
@@ -27,6 +27,12 @@ export const duplicateEnvelopeRoute = authenticatedProcedure
       id: {
         type: 'envelopeId',
         id: envelopeId,
+      },
+      requestMetadata: ctx.metadata,
+      overrides: {
+        includeRecipients,
+        includeFields,
+        includeContents,
       },
     });
 
