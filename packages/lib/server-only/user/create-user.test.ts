@@ -1,15 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const {
-  prismaUserFindFirstMock,
-  prismaUserCreateMock,
-  prismaTransactionMock,
-  createPersonalOrganisationMock,
-  hashMock,
-} = vi.hoisted(() => ({
+const { prismaUserFindFirstMock, prismaUserCreateMock, createPersonalOrganisationMock, hashMock } = vi.hoisted(() => ({
   prismaUserFindFirstMock: vi.fn(),
   prismaUserCreateMock: vi.fn(),
-  prismaTransactionMock: vi.fn(),
   createPersonalOrganisationMock: vi.fn(),
   hashMock: vi.fn(),
 }));
@@ -18,8 +11,8 @@ vi.mock('@documenso/prisma', () => ({
   prisma: {
     user: {
       findFirst: prismaUserFindFirstMock,
+      create: prismaUserCreateMock,
     },
-    $transaction: prismaTransactionMock,
   },
 }));
 
@@ -40,9 +33,6 @@ describe('createUser', () => {
     hashMock.mockResolvedValue('hashed-password');
     prismaUserFindFirstMock.mockResolvedValue(null);
     createPersonalOrganisationMock.mockResolvedValue(undefined);
-
-    // Run the transaction callback with a tx exposing user.create.
-    prismaTransactionMock.mockImplementation(async (callback) => callback({ user: { create: prismaUserCreateMock } }));
 
     prismaUserCreateMock.mockImplementation(async ({ data }) => ({ id: 1, ...data }));
   });

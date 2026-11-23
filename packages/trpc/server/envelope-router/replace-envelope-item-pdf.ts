@@ -1,4 +1,5 @@
 import { AppError, AppErrorCode } from '@documenso/lib/errors/app-error';
+import { assertEnvelopeMutable } from '@documenso/lib/server-only/envelope/assert-envelope-mutable';
 import { getEnvelopeWhereInput } from '@documenso/lib/server-only/envelope/get-envelope-by-id';
 import { UNSAFE_replaceEnvelopeItemPdf } from '@documenso/lib/server-only/envelope-item/replace-envelope-item-pdf';
 import { getEnvelopeItemPermissions } from '@documenso/lib/utils/envelope';
@@ -59,6 +60,8 @@ export const replaceEnvelopeItemPdfRoute = authenticatedProcedure
       });
     }
 
+    assertEnvelopeMutable(envelope);
+
     if (envelope.internalVersion !== 2) {
       throw new AppError(AppErrorCode.INVALID_REQUEST, {
         message: 'PDF replacement is only supported for version 2 envelopes',
@@ -81,7 +84,7 @@ export const replaceEnvelopeItemPdfRoute = authenticatedProcedure
       });
     }
 
-    const { updatedItem, fields } = await UNSAFE_replaceEnvelopeItemPdf({
+    const { updatedItem, fields, contents } = await UNSAFE_replaceEnvelopeItemPdf({
       envelope,
       recipients: envelope.recipients,
       envelopeItemId,
@@ -101,5 +104,6 @@ export const replaceEnvelopeItemPdfRoute = authenticatedProcedure
     return {
       data: updatedItem,
       fields,
+      contents,
     };
   });

@@ -116,11 +116,12 @@ export const EditorFieldDropdownForm = ({
     }
 
     const newValues = [...currentValues];
+    const removedValue = currentValues[index].value;
     newValues.splice(index, 1);
 
     form.setValue('values', newValues);
 
-    if (form.getValues('defaultValue') === newValues[index].value) {
+    if (form.getValues('defaultValue') === removedValue) {
       form.setValue('defaultValue', undefined);
     }
   };
@@ -138,7 +139,7 @@ export const EditorFieldDropdownForm = ({
 
   return (
     <Form {...form}>
-      <form>
+      <form onSubmit={(e) => e.preventDefault()}>
         <fieldset className="flex flex-col gap-2">
           <EditorGenericFontSizeField formControl={form.control} />
 

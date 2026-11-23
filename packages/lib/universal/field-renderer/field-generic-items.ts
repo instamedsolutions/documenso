@@ -1,6 +1,7 @@
 import { DEFAULT_RECT_BACKGROUND, getRecipientColorStyles } from '@documenso/ui/lib/recipient-colors';
 import Konva from 'konva';
 
+import { resolvePrimaryColor } from './field-canvas-style';
 import type { FieldToRender, RenderFieldElementOptions } from './field-renderer';
 import { calculateFieldPosition } from './field-renderer';
 
@@ -29,6 +30,7 @@ export const upsertFieldGroup = (field: FieldToRender, options: RenderFieldEleme
     x: fieldX,
     y: fieldY,
     draggable: editable,
+    opacity: options.fieldCanvasStyle?.opacity ?? 1,
     dragBoundFunc: (pos) => {
       const newX = Math.max(0, Math.min(maxXPosition, pos.x));
       const newY = Math.max(0, Math.min(maxYPosition, pos.y));
@@ -42,6 +44,7 @@ export const upsertFieldGroup = (field: FieldToRender, options: RenderFieldEleme
 
 export const upsertFieldRect = (field: FieldToRender, options: RenderFieldElementOptions): Konva.Rect => {
   const { pageWidth, pageHeight, mode, pageLayer, color } = options;
+  const { fieldCanvasStyle } = options;
 
   const { fieldWidth, fieldHeight } = calculateFieldPosition(field, pageWidth, pageHeight);
 
@@ -55,10 +58,10 @@ export const upsertFieldRect = (field: FieldToRender, options: RenderFieldElemen
   fieldRect.setAttrs({
     width: fieldWidth,
     height: fieldHeight,
-    fill: DEFAULT_RECT_BACKGROUND,
-    stroke: color ? getRecipientColorStyles(color).baseRing : '#e5e7eb',
-    strokeWidth: 2,
-    cornerRadius: 2,
+    fill: fieldCanvasStyle?.backgroundColor ?? DEFAULT_RECT_BACKGROUND,
+    stroke: fieldCanvasStyle?.borderColor ?? (color ? getRecipientColorStyles(color).baseRing : '#e5e7eb'),
+    strokeWidth: fieldCanvasStyle?.borderWidth ?? 2,
+    cornerRadius: fieldCanvasStyle?.borderRadius ?? 2,
     strokeScaleEnabled: false,
     visible: mode !== 'export',
   } satisfies Partial<Konva.RectConfig>);
@@ -69,6 +72,7 @@ export const upsertFieldRect = (field: FieldToRender, options: RenderFieldElemen
 export const createSpinner = ({ fieldWidth, fieldHeight }: { fieldWidth: number; fieldHeight: number }) => {
   const loadingGroup = new Konva.Group({
     name: 'loading-spinner-group',
+    listening: false,
   });
 
   const rect = new Konva.Rect({
@@ -91,7 +95,7 @@ export const createSpinner = ({ fieldWidth, fieldHeight }: { fieldWidth: number;
     outerRadius: spinnerSize / 2,
     angle: 270,
     rotation: 0,
-    fill: 'rgba(122, 195, 85, 1)',
+    fill: resolvePrimaryColor() ?? 'rgba(122, 195, 85, 1)',
     lineCap: 'round',
   });
 
@@ -123,6 +127,10 @@ export const createFieldHoverInteraction = ({ options, fieldGroup, fieldRect }: 
   const { mode } = options;
 
   if (mode === 'export' || !options.color) {
+    return;
+  }
+
+  if (options.fieldCanvasStyle?.backgroundColor) {
     return;
   }
 

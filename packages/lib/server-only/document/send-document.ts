@@ -1,3 +1,4 @@
+import { materializeTspAnchorsForEnvelope } from '@documenso/ee/server-only/signing/csc/materialize-anchors';
 import { resolveExpiresAt } from '@documenso/lib/constants/envelope-expiration';
 import { DOCUMENT_AUDIT_LOG_TYPE } from '@documenso/lib/types/document-audit-logs';
 import type { ApiRequestMetadata } from '@documenso/lib/universal/extract-request-metadata';
@@ -15,6 +16,7 @@ import {
   SigningStatus,
   WebhookTriggerEvents,
 } from '@prisma/client';
+import pMap from 'p-map';
 
 import { validateCheckboxLength } from '../../advanced-fields-validation/validate-checkbox';
 import { DIRECT_TEMPLATE_RECIPIENT_EMAIL } from '../../constants/direct-templates';
@@ -29,16 +31,27 @@ import {
   ZRadioFieldMeta,
   ZTextFieldMeta,
 } from '../../types/field-meta';
+import { isTspEnvelope } from '../../types/signature-level';
 import { mapEnvelopeToWebhookDocumentPayload, ZWebhookDocumentSchema } from '../../types/webhook-payload';
 import { getFileServerSide } from '../../universal/upload/get-file.server';
 import { putNormalizedPdfFileServerSide } from '../../universal/upload/put-file.server';
 import { isDocumentCompleted } from '../../utils/document';
 import { extractDocumentAuthMethods } from '../../utils/document-auth';
 import { type EnvelopeIdOptions, mapSecondaryIdToDocumentId } from '../../utils/envelope';
+import { assertEnvelopeContentLimits, getContentsMissingImages } from '../../utils/envelope-content';
 import { toCheckboxCustomText, toRadioCustomText } from '../../utils/fields';
+import { getRecipientsInActiveSigningStep } from '../../utils/recipient-groups';
 import { getRecipientsWithMissingFields, isRecipientEmailValidForSending } from '../../utils/recipients';
+import { loadContentImages } from '../data-content/load-content-images';
 import { getEnvelopeWhereInput } from '../envelope/get-envelope-by-id';
+import {
+  commitRenderedEnvelopeItems,
+  RENDER_CONTENTS_CONCURRENCY,
+  type RenderedEnvelopeItem,
+  renderContentsIntoEnvelopeItem,
+} from '../envelope-content/insert-contents-into-envelope-item';
 import { insertFormValuesInPdf } from '../pdf/insert-form-values-in-pdf';
+import { assertUserNotDisabledById } from '../user/assert-user-not-disabled';
 import { triggerWebhook } from '../webhooks/trigger/trigger-webhook';
 
 export type SendDocumentOptions = {
@@ -50,6 +63,11 @@ export type SendDocumentOptions = {
 };
 
 export const sendDocument = async ({ id, userId, teamId, sendEmail, requestMetadata }: SendDocumentOptions) => {
+  // Refuse to send on behalf of a disabled account. Guards distribute /
+  // redistribute / template-use routes, the bulk-send job, and direct
+  // templates that auto-send on creation.
+  await assertUserNotDisabledById({ userId });
+
   const { envelopeWhereInput } = await getEnvelopeWhereInput({
     id,
     type: EnvelopeType.DOCUMENT,
@@ -65,6 +83,14 @@ export const sendDocument = async ({ id, userId, teamId, sendEmail, requestMetad
       },
       fields: true,
       documentMeta: true,
+      contents: {
+        select: {
+          id: true,
+          dataContentId: true,
+          contentMeta: true,
+          envelopeItemId: true,
+        },
+      },
       envelopeItems: {
         select: {
           id: true,
@@ -74,6 +100,21 @@ export const sendDocument = async ({ id, userId, teamId, sendEmail, requestMetad
               id: true,
               data: true,
               initialData: true,
+            },
+          },
+        },
+      },
+      team: {
+        select: {
+          organisation: {
+            select: {
+              organisationClaim: {
+                select: {
+                  recipientCount: true,
+                  envelopeContentCount: true,
+                  envelopeContentImageCount: true,
+                },
+              },
             },
           },
         },
@@ -89,32 +130,56 @@ export const sendDocument = async ({ id, userId, teamId, sendEmail, requestMetad
     throw new Error('Document has no recipients');
   }
 
+  // A recipientCount of 0 means unlimited recipients are allowed.
+  const maximumRecipientCount = envelope.team.organisation.organisationClaim.recipientCount;
+
+  if (maximumRecipientCount > 0 && envelope.recipients.length > maximumRecipientCount) {
+    throw new AppError('RECIPIENT_LIMIT_EXCEEDED', {
+      message: `You cannot send a document with more than ${maximumRecipientCount} recipients`,
+      statusCode: 400,
+    });
+  }
+
   if (isDocumentCompleted(envelope.status)) {
     throw new Error('Can not send completed document');
   }
 
   const legacyDocumentId = mapSecondaryIdToDocumentId(envelope.secondaryId);
 
-  const signingOrder = envelope.documentMeta?.signingOrder || DocumentSigningOrder.PARALLEL;
+  let signingOrder = envelope.documentMeta?.signingOrder || DocumentSigningOrder.PARALLEL;
+
+  if (isTspEnvelope(envelope) && signingOrder === DocumentSigningOrder.PARALLEL && envelope.documentMeta) {
+    console.warn(
+      `[CSC] Coercing signingOrder=PARALLEL → SEQUENTIAL for ${envelope.signatureLevel} envelope ${envelope.id} at send time. The schema-layer guard should have caught this earlier.`,
+    );
+
+    await prisma.documentMeta.update({
+      where: {
+        id: envelope.documentMeta.id,
+      },
+      data: {
+        signingOrder: DocumentSigningOrder.SEQUENTIAL,
+      },
+    });
+
+    signingOrder = DocumentSigningOrder.SEQUENTIAL;
+
+    envelope.documentMeta.signingOrder = DocumentSigningOrder.SEQUENTIAL;
+  }
 
   let recipientsToNotify = envelope.recipients;
 
   if (signingOrder === DocumentSigningOrder.SEQUENTIAL) {
-    // Get the currently active recipient.
-    recipientsToNotify = envelope.recipients
-      .filter((r) => r.signingStatus === SigningStatus.NOT_SIGNED && r.role !== RecipientRole.CC)
-      .slice(0, 1);
-
-    // Secondary filter so we aren't resending if the current active recipient has already
-    // received the envelope.
-    recipientsToNotify.filter((r) => r.sendStatus !== SendStatus.SENT);
+    recipientsToNotify = getRecipientsInActiveSigningStep(envelope.recipients, {
+      strictlySequential: isTspEnvelope(envelope),
+    });
   }
 
   if (envelope.envelopeItems.length === 0) {
     throw new Error('Missing envelope items');
   }
 
-  if (envelope.formValues) {
+  if (envelope.formValues && envelope.status === DocumentStatus.DRAFT) {
     await Promise.all(
       envelope.envelopeItems.map(async (envelopeItem) => {
         await injectFormValuesIntoDocument(envelope, envelopeItem);
@@ -140,6 +205,22 @@ export const sendDocument = async ({ id, userId, teamId, sendEmail, requestMetad
     }
   });
 
+  // An image content without an image renders nothing, so the document would
+  // silently ship without it.
+  const contentsMissingImages = getContentsMissingImages(envelope.contents);
+
+  if (contentsMissingImages.length > 0) {
+    throw new AppError('MISSING_CONTENT_IMAGE', {
+      message: `The following contents have no image attached: ${contentsMissingImages.map((content) => content.id).join(', ')}.`,
+      statusCode: 400,
+    });
+  }
+
+  assertEnvelopeContentLimits(
+    envelope.contents.map((content) => content.contentMeta.type),
+    envelope.team.organisation.organisationClaim,
+  );
+
   // Validate that recipients who require fields (e.g., signers need signature fields) have them.
   const recipientsWithMissingFields = getRecipientsWithMissingFields(envelope.recipients, envelope.fields);
 
@@ -148,9 +229,32 @@ export const sendDocument = async ({ id, userId, teamId, sendEmail, requestMetad
       .map((r) => (r.name ? `${r.name} (${r.email}, id: ${r.id})` : `${r.email} (id: ${r.id})`))
       .join(', ');
 
-    throw new AppError(AppErrorCode.INVALID_REQUEST, {
+    throw new AppError(AppErrorCode.MISSING_SIGNATURE_FIELD, {
       message: `The following recipients are missing required fields: ${missingRecipientDescriptions}. Signers must have at least one signature field.`,
     });
+  }
+
+  // The items are only pointed at the rendered copies inside the transaction
+  // that moves the envelope on from DRAFT, so a failure anywhere before that
+  // leaves every item on its original file rather than some on a rendered one
+  // which the next send would render onto again.
+  let renderedEnvelopeItems: RenderedEnvelopeItem[] = [];
+
+  if (envelope.status === DocumentStatus.DRAFT && envelope.contents.length > 0) {
+    const images = await loadContentImages(envelope.contents);
+
+    const results = await pMap(
+      envelope.envelopeItems,
+      async (envelopeItem) =>
+        renderContentsIntoEnvelopeItem({
+          envelopeItemId: envelopeItem.id,
+          contents: envelope.contents.filter((content) => content.envelopeItemId === envelopeItem.id),
+          images,
+        }),
+      { concurrency: RENDER_CONTENTS_CONCURRENCY },
+    );
+
+    renderedEnvelopeItems = results.filter((result): result is RenderedEnvelopeItem => result !== null);
   }
 
   const allRecipientsHaveNoActionToTake = envelope.recipients.every(
@@ -158,6 +262,27 @@ export const sendDocument = async ({ id, userId, teamId, sendEmail, requestMetad
   );
 
   if (allRecipientsHaveNoActionToTake) {
+    // Nobody is left to act, so the send transaction below is skipped and the
+    // rendered items have to be committed here before sealing.
+    if (envelope.status === DocumentStatus.DRAFT) {
+      await prisma.$transaction(async (tx) => {
+        await commitRenderedEnvelopeItems(tx, {
+          envelopeId: envelope.id,
+          contents: envelope.contents,
+          renderedEnvelopeItems,
+        });
+
+        await tx.envelope.update({
+          where: {
+            id: envelope.id,
+          },
+          data: {
+            status: DocumentStatus.PENDING,
+          },
+        });
+      });
+    }
+
     await jobs.triggerJob({
       name: 'internal.seal-document',
       payload: {
@@ -200,8 +325,23 @@ export const sendDocument = async ({ id, userId, teamId, sendEmail, requestMetad
     }
   }
 
+  if (isTspEnvelope(envelope) && envelope.status === DocumentStatus.DRAFT) {
+    await materializeTspAnchorsForEnvelope({
+      envelopeId: envelope.id,
+      documentDataOverrides: Object.fromEntries(
+        renderedEnvelopeItems.map((item) => [item.envelopeItemId, item.documentData]),
+      ),
+    });
+  }
+
   const updatedEnvelope = await prisma.$transaction(async (tx) => {
     if (envelope.status === DocumentStatus.DRAFT) {
+      await commitRenderedEnvelopeItems(tx, {
+        envelopeId: envelope.id,
+        contents: envelope.contents,
+        renderedEnvelopeItems,
+      });
+
       await tx.documentAuditLog.create({
         data: createDocumentAuditLogData({
           type: DOCUMENT_AUDIT_LOG_TYPE.DOCUMENT_SENT,
@@ -335,7 +475,7 @@ const injectFormValuesIntoDocument = async (
     fileName = `${envelope.title}.pdf`;
   }
 
-  const newDocumentData = await putNormalizedPdfFileServerSide({
+  const { documentData: newDocumentData } = await putNormalizedPdfFileServerSide({
     name: fileName,
     type: 'application/pdf',
     arrayBuffer: async () => Promise.resolve(prefilled),

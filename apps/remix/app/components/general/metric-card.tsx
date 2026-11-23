@@ -7,9 +7,10 @@ export type CardMetricProps = {
   value?: string | number;
   className?: string;
   children?: React.ReactNode;
+  testId?: string;
 };
 
-export const CardMetric = ({ icon: Icon, title, value, className, children }: CardMetricProps) => {
+export const CardMetric = ({ icon: Icon, title, value, className, children, testId }: CardMetricProps) => {
   return (
     <div
       className={cn(
@@ -25,11 +26,11 @@ export const CardMetric = ({ icon: Icon, title, value, className, children }: Ca
             </div>
           )}
 
-          <h3 className="mb-2 flex items-end font-medium text-primary-forground text-sm leading-tight">{title}</h3>
+          <h3 className="mb-2 flex items-end font-medium text-sm leading-tight">{title}</h3>
         </div>
 
         {children || (
-          <p className="mt-auto font-semibold text-4xl text-foreground leading-8">
+          <p className="mt-auto font-semibold text-4xl text-foreground leading-8" data-testid={testId}>
             {typeof value === 'number' ? value.toLocaleString('en-US') : value}
           </p>
         )}

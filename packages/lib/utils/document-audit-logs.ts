@@ -2,16 +2,18 @@ import type { I18n } from '@lingui/core';
 import { msg } from '@lingui/core/macro';
 import type { DocumentAuditLog, DocumentMeta, Field, Recipient } from '@prisma/client';
 import { RecipientRole } from '@prisma/client';
-import { isDeepEqual } from 'remeda';
+import { isDeepEqual, unique } from 'remeda';
 import { match } from 'ts-pattern';
 
 import type {
   TDocumentAuditLog,
+  TDocumentAuditLogContentDiffSchema,
   TDocumentAuditLogDocumentMetaDiffSchema,
   TDocumentAuditLogFieldDiffSchema,
   TDocumentAuditLogRecipientDiffSchema,
 } from '../types/document-audit-logs';
 import {
+  CONTENT_DIFF_TYPE,
   DOCUMENT_AUDIT_LOG_TYPE,
   DOCUMENT_META_DIFF_TYPE,
   FIELD_DIFF_TYPE,
@@ -19,6 +21,7 @@ import {
   ZDocumentAuditLogSchema,
 } from '../types/document-audit-logs';
 import { ZRecipientAuthOptionsSchema } from '../types/document-auth';
+import type { TEnvelopeContentMeta } from '../types/envelope-content-meta';
 import type { ApiRequestMetadata, RequestMetadata } from '../universal/extract-request-metadata';
 
 type CreateDocumentAuditLogDataOptions<T = TDocumentAuditLog['type']> = {
@@ -142,6 +145,61 @@ export const diffRecipientChanges = (
       type: RECIPIENT_DIFF_TYPE.NAME,
       from: oldRecipient.name,
       to: newRecipient.name,
+    });
+  }
+
+  return diffs;
+};
+
+const toContentDiffValue = (value: unknown) => {
+  if (value === undefined || value === null) {
+    return null;
+  }
+
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+    return value;
+  }
+
+  return JSON.stringify(value);
+};
+
+type ContentDiffSource = {
+  contentMeta: TEnvelopeContentMeta;
+  dataContentId?: string | null;
+};
+
+export const diffContentChanges = (
+  oldContent: ContentDiffSource,
+  newContent: ContentDiffSource,
+): TDocumentAuditLogContentDiffSchema[] => {
+  const diffs: TDocumentAuditLogContentDiffSchema[] = [];
+
+  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
+  const oldValues = oldContent.contentMeta as unknown as Record<string, unknown>;
+  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
+  const newValues = newContent.contentMeta as unknown as Record<string, unknown>;
+
+  // Sorted so a given change always produces the same record.
+  const propertyKeys = unique([...Object.keys(oldValues), ...Object.keys(newValues)]).sort();
+
+  for (const key of propertyKeys) {
+    const fromValue = toContentDiffValue(oldValues[key]);
+    const toValue = toContentDiffValue(newValues[key]);
+
+    if (fromValue !== toValue) {
+      diffs.push({ type: CONTENT_DIFF_TYPE.PROPERTY, key, from: fromValue, to: toValue });
+    }
+  }
+
+  const fromDataContentId = oldContent.dataContentId ?? null;
+  const toDataContentId = newContent.dataContentId ?? null;
+
+  if (fromDataContentId !== toDataContentId) {
+    diffs.push({
+      type: CONTENT_DIFF_TYPE.PROPERTY,
+      key: 'dataContentId',
+      from: fromDataContentId,
+      to: toDataContentId,
     });
   }
 
@@ -291,6 +349,30 @@ export const formatDocumentAuditLogAction = (i18n: I18n, auditLog: TDocumentAudi
   const prefix = isCurrentUser ? i18n._(msg`You`) : user || '';
 
   const description = match(auditLog)
+    .with({ type: DOCUMENT_AUDIT_LOG_TYPE.CONTENT_CREATED }, () => ({
+      anonymous: msg({
+        message: `A content was added`,
+        context: `Audit log format`,
+      }),
+      you: msg`You added a content`,
+      user: msg`${user} added a content`,
+    }))
+    .with({ type: DOCUMENT_AUDIT_LOG_TYPE.CONTENT_DELETED }, () => ({
+      anonymous: msg({
+        message: `A content was removed`,
+        context: `Audit log format`,
+      }),
+      you: msg`You removed a content`,
+      user: msg`${user} removed a content`,
+    }))
+    .with({ type: DOCUMENT_AUDIT_LOG_TYPE.CONTENT_UPDATED }, () => ({
+      anonymous: msg({
+        message: `A content was updated`,
+        context: `Audit log format`,
+      }),
+      you: msg`You updated a content`,
+      user: msg`${user} updated a content`,
+    }))
     .with({ type: DOCUMENT_AUDIT_LOG_TYPE.FIELD_CREATED }, () => ({
       anonymous: msg({
         message: `A field was added`,
@@ -323,6 +405,14 @@ export const formatDocumentAuditLogAction = (i18n: I18n, auditLog: TDocumentAudi
       you: msg`You added a recipient`,
       user: msg`${user} added a recipient`,
     }))
+    .with({ type: DOCUMENT_AUDIT_LOG_TYPE.RECIPIENT_DELETED, data: { removedByAdmin: true } }, () => ({
+      anonymous: msg({
+        message: `A recipient was removed by an administrator`,
+        context: `Audit log format`,
+      }),
+      you: msg`You removed a recipient as an administrator`,
+      user: msg`${user} removed a recipient as an administrator`,
+    }))
     .with({ type: DOCUMENT_AUDIT_LOG_TYPE.RECIPIENT_DELETED }, () => ({
       anonymous: msg({
         message: `A recipient was removed`,
@@ -354,6 +444,14 @@ export const formatDocumentAuditLogAction = (i18n: I18n, auditLog: TDocumentAudi
       }),
       you: msg`You deleted the document`,
       user: msg`${user} deleted the document`,
+    }))
+    .with({ type: DOCUMENT_AUDIT_LOG_TYPE.DOCUMENT_CANCELLED }, () => ({
+      anonymous: msg({
+        message: `Document cancelled`,
+        context: `Audit log format`,
+      }),
+      you: msg`You cancelled the document`,
+      user: msg`${user} cancelled the document`,
     }))
     .with({ type: DOCUMENT_AUDIT_LOG_TYPE.DOCUMENT_FIELDS_AUTO_INSERTED }, () => ({
       anonymous: msg({
@@ -501,11 +599,31 @@ export const formatDocumentAuditLogAction = (i18n: I18n, auditLog: TDocumentAudi
           user: msg`${user} completed their task`,
         }));
     })
-    .with({ type: DOCUMENT_AUDIT_LOG_TYPE.DOCUMENT_RECIPIENT_REJECTED }, () => ({
-      anonymous: msg`Recipient rejected the document`,
-      you: msg`You rejected the document`,
-      user: msg`${user} rejected the document`,
-    }))
+    .with({ type: DOCUMENT_AUDIT_LOG_TYPE.DOCUMENT_RECIPIENT_REJECTED }, ({ data }) => {
+      if (data.isExternal) {
+        const onBehalfOf = data.onBehalfOfUserName || data.onBehalfOfUserEmail;
+
+        if (onBehalfOf) {
+          return {
+            anonymous: msg`The document was rejected externally by ${onBehalfOf} on behalf of the recipient`,
+            you: msg`The document was rejected externally by ${onBehalfOf} on behalf of the recipient`,
+            user: msg`The document was rejected externally by ${onBehalfOf} on behalf of ${user}`,
+          };
+        }
+
+        return {
+          anonymous: msg`Recipient rejected the document externally`,
+          you: msg`The document was rejected externally on behalf of the recipient`,
+          user: msg`The document was rejected externally on behalf of ${user}`,
+        };
+      }
+
+      return {
+        anonymous: msg`Recipient rejected the document`,
+        you: msg`You rejected the document`,
+        user: msg`${user} rejected the document`,
+      };
+    })
     .with({ type: DOCUMENT_AUDIT_LOG_TYPE.DOCUMENT_ACCESS_AUTH_2FA_REQUESTED }, () => ({
       anonymous: msg`Recipient requested a 2FA token for the document`,
       you: msg`You requested a 2FA token for the document`,
@@ -597,6 +715,31 @@ export const formatDocumentAuditLogAction = (i18n: I18n, auditLog: TDocumentAudi
         user: message,
       };
     })
+    .with({ type: DOCUMENT_AUDIT_LOG_TYPE.DOCUMENT_RECIPIENT_CSC_AUTHENTICATED }, () => ({
+      anonymous: msg`Recipient authenticated with the signing provider`,
+      you: msg`You authenticated with the signing provider`,
+      user: msg`${user} authenticated with the signing provider`,
+    }))
+    .with({ type: DOCUMENT_AUDIT_LOG_TYPE.DOCUMENT_RECIPIENT_CSC_AUTHENTICATION_FAILED }, () => ({
+      anonymous: msg`Recipient's signing provider authentication failed`,
+      you: msg`Your signing provider authentication failed`,
+      user: msg`${user}'s signing provider authentication failed`,
+    }))
+    .with({ type: DOCUMENT_AUDIT_LOG_TYPE.DOCUMENT_RECIPIENT_CSC_SIGN_REQUESTED }, () => ({
+      anonymous: msg`Recipient requested a remote signature`,
+      you: msg`You requested a remote signature`,
+      user: msg`${user} requested a remote signature`,
+    }))
+    .with({ type: DOCUMENT_AUDIT_LOG_TYPE.DOCUMENT_RECIPIENT_CSC_AUTHORIZED }, () => ({
+      anonymous: msg`Recipient authorised the remote signature`,
+      you: msg`You authorised the remote signature`,
+      user: msg`${user} authorised the remote signature`,
+    }))
+    .with({ type: DOCUMENT_AUDIT_LOG_TYPE.DOCUMENT_RECIPIENT_CSC_SIGNED }, () => ({
+      anonymous: msg`Recipient's remote signature was applied`,
+      you: msg`Your remote signature was applied`,
+      user: msg`${user}'s remote signature was applied`,
+    }))
     .exhaustive();
 
   let selectedDescription = description.anonymous;

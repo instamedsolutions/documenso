@@ -13,8 +13,18 @@ export const ZFindSubscriptionClaimsResponseSchema = ZFindResultResponse.extend(
     teamCount: true,
     memberCount: true,
     envelopeItemCount: true,
+    recipientCount: true,
+    envelopeContentCount: true,
+    envelopeContentImageCount: true,
     locked: true,
     flags: true,
+    documentRateLimits: true,
+    documentQuota: true,
+    emailRateLimits: true,
+    emailQuota: true,
+    apiRateLimits: true,
+    apiQuota: true,
+    emailTransportId: true,
   }).array(),
 });
 

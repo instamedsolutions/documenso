@@ -102,12 +102,14 @@ export const AddSubjectFormPartial = ({
         : msg`Send`,
       [DocumentStatus.COMPLETED]: msg`Update`,
       [DocumentStatus.REJECTED]: msg`Update`,
+      [DocumentStatus.CANCELLED]: msg`Update`,
     },
     [DocumentDistributionMethod.NONE]: {
       [DocumentStatus.DRAFT]: msg`Generate Links`,
       [DocumentStatus.PENDING]: msg`View Document`,
       [DocumentStatus.COMPLETED]: msg`View Document`,
       [DocumentStatus.REJECTED]: msg`View Document`,
+      [DocumentStatus.CANCELLED]: msg`View Document`,
     },
   };
 
@@ -156,6 +158,7 @@ export const AddSubjectFormPartial = ({
               showRecipientColors={true}
               recipientIds={recipients.map((recipient) => recipient.id)}
               fields={mapFieldsWithRecipients(fields, recipients)}
+              documentMeta={document.documentMeta}
             />
           )}
 

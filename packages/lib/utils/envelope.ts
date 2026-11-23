@@ -238,16 +238,29 @@ export type EnvelopeItemPermissions = {
   canOrderBeChanged: boolean;
 };
 
+/**
+ * Contents are inserted into the PDF when the envelope is sent, so from PENDING
+ * onwards the bytes already contain them and the client must not draw them again.
+ */
+export const areContentsImprinted = (status: DocumentStatus) => {
+  return status !== DocumentStatus.DRAFT;
+};
+
+export const canContentBeChanged = (envelope: Pick<Envelope, 'status'>) => {
+  return envelope.status === DocumentStatus.DRAFT;
+};
+
 export const getEnvelopeItemPermissions = (
   envelope: Pick<Envelope, 'completedAt' | 'deletedAt' | 'type' | 'status'>,
   recipients: Pick<Recipient, 'role' | 'signingStatus' | 'sendStatus'>[],
 ): EnvelopeItemPermissions => {
-  // Always reject completed/rejected/deleted envelopes.
+  // Always reject completed/rejected/cancelled/deleted envelopes.
   if (
     envelope.completedAt ||
     envelope.deletedAt ||
     envelope.status === DocumentStatus.REJECTED ||
-    envelope.status === DocumentStatus.COMPLETED
+    envelope.status === DocumentStatus.COMPLETED ||
+    envelope.status === DocumentStatus.CANCELLED
   ) {
     return {
       canTitleBeChanged: false,

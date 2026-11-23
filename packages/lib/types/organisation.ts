@@ -20,6 +20,9 @@ export const ZOrganisationSchema = OrganisationSchema.pick({
     originalSubscriptionClaimId: true,
     teamCount: true,
     memberCount: true,
+    recipientCount: true,
+    envelopeContentCount: true,
+    envelopeContentImageCount: true,
     flags: true,
   }),
 });
