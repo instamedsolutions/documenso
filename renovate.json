@@ -1,0 +1,60 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": "Mises à jour des images de base des Dockerfiles, figées en image:tag@sha256 (scripts/check-base-images.py). Exécuté par le workflow Renovate du dépôt infra (.github/workflows/renovate.yml), avec la GitHub App instamed-renovate. Calqué sur renovate.json de l'infra. Seul docker/Dockerfile est construit (staging-release.yml) : les Dockerfiles amont de apps/ et docker/development/ sont ignorés, pour ne pas créer de conflits avec documenso/documenso.",
+  "baseBranchPatterns": [
+    "staging"
+  ],
+  "timezone": "Europe/Paris",
+  "enabledManagers": [
+    "dockerfile"
+  ],
+  "dependencyDashboard": true,
+  "dependencyDashboardTitle": "Mises à jour des images de base Docker (Dependency Dashboard)",
+  "pinDigests": true,
+  "prConcurrentLimit": 5,
+  "commitMessagePrefix": "[Feature] -",
+  "commitMessageAction": "Mise à jour de",
+  "commitMessageExtra": "vers {{newVersion}}",
+  "packageRules": [
+    {
+      "description": "Nos propres images ne passent pas par Renovate.",
+      "matchPackageNames": [
+        "ghcr.io/instamedsolutions/**",
+        "instamedsolutions/**"
+      ],
+      "enabled": false
+    },
+    {
+      "description": "Patchs, mineures et changements de digest : un seul lot, ouvert le lundi matin. Après le merge, vérifier dans Inspector que les findings de l'image disparaissent.",
+      "matchUpdateTypes": [
+        "minor",
+        "patch",
+        "digest"
+      ],
+      "groupName": "images de base Docker",
+      "schedule": [
+        "before 9am on monday"
+      ]
+    },
+    {
+      "description": "Node reste en 22.x sur Alpine 3.22, comme l'amont documenso : changer de base se fait avec une montée de l'amont.",
+      "matchPackageNames": [
+        "node"
+      ],
+      "allowedVersions": "/^22\\.\\d+\\.\\d+-alpine3\\.22$/"
+    },
+    {
+      "description": "Aucune PR automatique pour une majeure : elle se fait à la main, avec le changelog et un test en staging.",
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "enabled": false
+    }
+  ],
+  "ignorePaths": [
+    "**/node_modules/**",
+    "**/bower_components/**",
+    "apps/**",
+    "docker/development/**"
+  ]
+}
