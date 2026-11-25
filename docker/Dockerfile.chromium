@@ -1,4 +1,4 @@
-ARG TAG=latest
+ARG TAG=latest@sha256:f9976d2142d34ee89506e161b0a5ec859a0c327f3fe0a398b46d3941fc8dd35e
 FROM documenso/documenso:${TAG}
 
 # Install @playwright/browser-chromium which bundles Playwright + Chromium
