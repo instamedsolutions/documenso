@@ -577,7 +577,7 @@ enum DocumentDistributionMethod {
   NONE
 }
 
-/// @zod.import(["import { ZDocumentEmailSettingsSchema } from '@documenso/lib/types/document-email';", "import { ZEnvelopeExpirationPeriod as ZEnvelopeExpirationPeriodSchema } from '@documenso/lib/constants/envelope-expiration';", "import { ZEnvelopeReminderSettings as ZEnvelopeReminderSettingsSchema } from '@documenso/lib/constants/envelope-reminder';"])
+/// @zod.import(["import { ZDocumentEmailSettingsSchema } from '@documenso/lib/types/document-email';", "import { ZEnvelopeExpirationPeriod as ZEnvelopeExpirationPeriodSchema } from '@documenso/lib/constants/envelope-expiration';", "import { ZEnvelopeReminderSettings as ZEnvelopeReminderSettingsSchema } from '@documenso/lib/constants/envelope-reminder';", "import { ZOwnerNotificationEmailsSchema } from '@documenso/lib/types/owner-notification';"])
 model DocumentMeta {
   id                     String               @id @default(cuid())
   subject                String?
@@ -602,6 +602,11 @@ model DocumentMeta {
   envelopeExpirationPeriod Json? /// [EnvelopeExpirationPeriod] @zod.custom.use(ZEnvelopeExpirationPeriodSchema)
 
   reminderSettings Json? /// [EnvelopeReminderSettings] @zod.custom.use(ZEnvelopeReminderSettingsSchema)
+
+  /// Addresses receiving the owner-targeted e-mails. NULL = the envelope owner, empty array = nobody.
+  ownerNotificationEmails Json? /// [OwnerNotificationEmails] @zod.custom.use(ZOwnerNotificationEmailsSchema)
+  /// Link used as the button of the owner-targeted e-mails instead of the dashboard link.
+  ownerNotificationLink   String?
 
   envelope Envelope?
 }

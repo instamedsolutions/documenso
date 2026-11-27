@@ -104,7 +104,10 @@ vi.mock('../../../utils/document-audit-logs', () => ({
 
 import { run } from './send-document-completed-emails.handler';
 
-const buildEnvelope = (emailSettings: Partial<typeof DEFAULT_DOCUMENT_EMAIL_SETTINGS> = {}) => ({
+const buildEnvelope = (
+  emailSettings: Partial<typeof DEFAULT_DOCUMENT_EMAIL_SETTINGS> = {},
+  ownerNotification: { ownerNotificationEmails?: string[] | null; ownerNotificationLink?: string | null } = {},
+) => ({
   id: 1,
   title: 'Patient Intake',
   teamId: 1,
@@ -144,6 +147,7 @@ const buildEnvelope = (emailSettings: Partial<typeof DEFAULT_DOCUMENT_EMAIL_SETT
       ...DEFAULT_DOCUMENT_EMAIL_SETTINGS,
       ...emailSettings,
     },
+    ...ownerNotification,
   },
 });
 
@@ -222,5 +226,84 @@ describe('sendDocumentCompletedEmails handler', () => {
     expect(getFileServerSideMock).not.toHaveBeenCalled();
     expect(mailerSendMailMock).not.toHaveBeenCalled();
     expect(prismaDocumentAuditLogCreateMock).not.toHaveBeenCalled();
+  });
+
+  describe('owner notification recipients', () => {
+    const ownerOnly = { documentCompleted: false, ownerDocumentCompleted: true };
+
+    const run_ = async () => run({ payload: { envelopeId: 'envelope-1' }, io: ioMock });
+    const sentTo = () => mailerSendMailMock.mock.calls.map(([mail]) => mail.to[0].address);
+
+    it('notifies the owner when the list is null or absent', async () => {
+      prismaEnvelopeFindUniqueMock.mockResolvedValue(buildEnvelope(ownerOnly, { ownerNotificationEmails: null }));
+      await run_();
+      expect(sentTo()).toEqual(['owner@example.com']);
+
+      vi.clearAllMocks();
+      prismaEnvelopeFindUniqueMock.mockResolvedValue(buildEnvelope(ownerOnly));
+      await run_();
+      expect(sentTo()).toEqual(['owner@example.com']);
+    });
+
+    it('sends one e-mail per configured address instead of the owner', async () => {
+      prismaEnvelopeFindUniqueMock.mockResolvedValue(
+        buildEnvelope(ownerOnly, { ownerNotificationEmails: ['assistante@example.com', 'medecin@example.com'] }),
+      );
+      await run_();
+
+      expect(sentTo()).toEqual(['assistante@example.com', 'medecin@example.com']);
+      expect(prismaDocumentAuditLogCreateMock).toHaveBeenCalledTimes(2);
+    });
+
+    it('notifies the configured addresses even when the owner is also a recipient', async () => {
+      const envelope = buildEnvelope(
+        { documentCompleted: true, ownerDocumentCompleted: true },
+        { ownerNotificationEmails: ['assistante@example.com'] },
+      );
+      envelope.recipients[0].email = 'owner@example.com';
+      prismaEnvelopeFindUniqueMock.mockResolvedValue(envelope);
+      await run_();
+
+      expect(sentTo().sort()).toEqual(['assistante@example.com', 'owner@example.com']);
+    });
+
+    it('sends nothing to the owner side when the list is empty', async () => {
+      prismaEnvelopeFindUniqueMock.mockResolvedValue(buildEnvelope(ownerOnly, { ownerNotificationEmails: [] }));
+      await run_();
+
+      expect(mailerSendMailMock).not.toHaveBeenCalled();
+    });
+
+    it('sends nothing when the ownerDocumentCompleted flag is disabled, whatever the list', async () => {
+      prismaEnvelopeFindUniqueMock.mockResolvedValue(
+        buildEnvelope(
+          { documentCompleted: false, ownerDocumentCompleted: false },
+          { ownerNotificationEmails: ['assistante@example.com'] },
+        ),
+      );
+      await run_();
+
+      expect(mailerSendMailMock).not.toHaveBeenCalled();
+    });
+
+    it('uses the custom link as the button of the owner e-mail only', async () => {
+      prismaEnvelopeFindUniqueMock.mockResolvedValue(
+        buildEnvelope(
+          { documentCompleted: true, ownerDocumentCompleted: true },
+          {
+            ownerNotificationEmails: ['assistante@example.com'],
+            ownerNotificationLink: 'https://app.instamed.fr/v2/patients/123/documents',
+          },
+        ),
+      );
+      await run_();
+
+      const links = renderEmailWithI18NMock.mock.calls.map(
+        ([element]) => (element as { props: { downloadLink: string } }).props.downloadLink,
+      );
+
+      expect(links[0]).toBe('https://app.instamed.fr/v2/patients/123/documents');
+      expect(links[2]).toContain('/sign/recipient-token/complete');
+    });
   });
 });

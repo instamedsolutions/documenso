@@ -290,6 +290,8 @@ export const ZEditorEnvelopeSchema = EnvelopeSchema.pick({
     emailReplyTo: true,
     envelopeExpirationPeriod: true,
     reminderSettings: true,
+    ownerNotificationEmails: true,
+    ownerNotificationLink: true,
   }),
   recipients: ZEnvelopeRecipientLiteSchema.array(),
   fields: ZEnvelopeFieldSchema.array(),

@@ -11,6 +11,7 @@ export interface DocumentRecipientSignedEmailTemplateProps {
   recipientName?: string;
   recipientEmail?: string;
   assetBaseUrl?: string;
+  documentLink?: string;
 }
 
 export const DocumentRecipientSignedEmailTemplate = ({
@@ -18,6 +19,7 @@ export const DocumentRecipientSignedEmailTemplate = ({
   recipientName = 'John Doe',
   recipientEmail = 'lucas@documenso.com',
   assetBaseUrl = 'http://localhost:3002',
+  documentLink,
 }: DocumentRecipientSignedEmailTemplateProps) => {
   const { _ } = useLingui();
 
@@ -41,6 +43,7 @@ export const DocumentRecipientSignedEmailTemplate = ({
                 recipientName={recipientName}
                 recipientEmail={recipientEmail}
                 assetBaseUrl={assetBaseUrl}
+                documentLink={documentLink}
               />
             </Section>
           </Container>

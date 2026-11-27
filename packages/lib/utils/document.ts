@@ -70,7 +70,12 @@ export const extractDerivedDocumentMeta = (
 
     // Reminder settings.
     reminderSettings: meta.reminderSettings ?? settings.reminderSettings ?? null,
-  } satisfies Omit<DocumentMeta, 'id'>;
+
+    // Owner notification (null = the envelope owner).
+    // A JSON column cannot be given a literal null on create, so it is only set when provided.
+    ...(meta.ownerNotificationEmails ? { ownerNotificationEmails: meta.ownerNotificationEmails } : {}),
+    ownerNotificationLink: meta.ownerNotificationLink ?? null,
+  } satisfies Omit<DocumentMeta, 'id' | 'ownerNotificationEmails'>;
 };
 
 /**

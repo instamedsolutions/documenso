@@ -130,6 +130,7 @@ export const duplicateEnvelope = async ({
       data: {
         ...omit(envelope.documentMeta, ['id']),
         emailSettings: envelope.documentMeta.emailSettings || undefined,
+        ownerNotificationEmails: envelope.documentMeta.ownerNotificationEmails ?? undefined,
       },
     }),
   ]);

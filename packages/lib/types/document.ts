@@ -69,6 +69,8 @@ export const ZDocumentSchema = LegacyDocumentSchema.pick({
     emailReplyTo: true,
     envelopeExpirationPeriod: true,
     reminderSettings: true,
+    ownerNotificationEmails: true,
+    ownerNotificationLink: true,
   }).extend({
     password: z.string().nullable().default(null),
     documentId: z.number().default(-1).optional(),

@@ -13,6 +13,7 @@ import { extractDerivedDocumentEmailSettings } from '../../../types/document-ema
 import { getFileServerSide } from '../../../universal/upload/get-file.server';
 import { createDocumentAuditLogData } from '../../../utils/document-audit-logs';
 import { unsafeBuildEnvelopeIdQuery } from '../../../utils/envelope';
+import { resolveOwnerNotification } from '../../../utils/owner-notification';
 import { isRecipientEmailValidForSending } from '../../../utils/recipients';
 import { renderCustomEmailTemplate } from '../../../utils/render-custom-email-template';
 import { renderEmailWithI18N } from '../../../utils/render-email-with-i18n';
@@ -73,9 +74,15 @@ export const run = async ({ payload, io }: { payload: TSendDocumentCompletedEmai
   // Send the owner completion email when owner notifications are enabled and either:
   // 1. the owner is not already receiving a recipient completion email, or
   // 2. recipient completion emails are disabled entirely.
+  // When the envelope defines its own owner notification list, the owner is not part of it
+  // implicitly, so the de-duplication against the recipients does not apply.
+  const ownerNotification = resolveOwnerNotification({ owner, documentMeta: envelope.documentMeta });
   const shouldSendOwnerDocumentCompletedEmail =
     isOwnerDocumentCompletedEmailEnabled &&
-    (!envelope.recipients.find((recipient) => recipient.email === owner.email) || !isDocumentCompletedEmailEnabled);
+    ownerNotification.recipients.length > 0 &&
+    (ownerNotification.isCustom ||
+      !envelope.recipients.find((recipient) => recipient.email === owner.email) ||
+      !isDocumentCompletedEmailEnabled);
   const recipientsToNotify = isDocumentCompletedEmailEnabled
     ? envelope.recipients.filter((recipient) => isRecipientEmailValidForSending(recipient))
     : [];
@@ -130,7 +137,7 @@ export const run = async ({ payload, io }: { payload: TSendDocumentCompletedEmai
     const template = createElement(DocumentCompletedEmailTemplate, {
       documentName: envelope.title,
       assetBaseUrl,
-      downloadLink: documentOwnerDownloadLink,
+      downloadLink: ownerNotification.link ?? documentOwnerDownloadLink,
     });
 
     const [html, text] = await Promise.all([
@@ -144,37 +151,37 @@ export const run = async ({ payload, io }: { payload: TSendDocumentCompletedEmai
 
     const i18n = await getI18nInstance(emailLanguage);
 
-    await emailTransport.sendMail({
-      to: [
-        {
-          name: owner.name || '',
-          address: owner.email,
-        },
-      ],
-      from: senderEmail,
-      replyTo: replyToEmail,
-      subject: i18n._(msg`Signing Complete!`),
-      html,
-      text,
-      ...(completedDocumentEmailAttachments ? { attachments: completedDocumentEmailAttachments } : {}),
-    });
+    // One e-mail per address so the notified people do not see each other.
+    await Promise.all(
+      ownerNotification.recipients.map(async (to) => {
+        await emailTransport.sendMail({
+          to: [to],
+          from: senderEmail,
+          replyTo: replyToEmail,
+          subject: i18n._(msg`Signing Complete!`),
+          html,
+          text,
+          ...(completedDocumentEmailAttachments ? { attachments: completedDocumentEmailAttachments } : {}),
+        });
 
-    await prisma.documentAuditLog.create({
-      data: createDocumentAuditLogData({
-        type: DOCUMENT_AUDIT_LOG_TYPE.EMAIL_SENT,
-        envelopeId: envelope.id,
-        user: null,
-        requestMetadata,
-        data: {
-          emailType: 'DOCUMENT_COMPLETED',
-          recipientEmail: owner.email,
-          recipientName: owner.name ?? '',
-          recipientId: owner.id,
-          recipientRole: 'OWNER',
-          isResending: false,
-        },
+        await prisma.documentAuditLog.create({
+          data: createDocumentAuditLogData({
+            type: DOCUMENT_AUDIT_LOG_TYPE.EMAIL_SENT,
+            envelopeId: envelope.id,
+            user: null,
+            requestMetadata,
+            data: {
+              emailType: 'DOCUMENT_COMPLETED',
+              recipientEmail: to.address,
+              recipientName: to.name,
+              recipientId: owner.id,
+              recipientRole: 'OWNER',
+              isResending: false,
+            },
+          }),
+        });
       }),
-    });
+    );
   }
 
   await Promise.all(

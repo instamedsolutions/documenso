@@ -9,6 +9,7 @@ import { NEXT_PUBLIC_WEBAPP_URL } from '../../../constants/app';
 import { getEmailContext } from '../../../server-only/email/get-email-context';
 import { extractDerivedDocumentEmailSettings } from '../../../types/document-email';
 import { unsafeBuildEnvelopeIdQuery } from '../../../utils/envelope';
+import { resolveOwnerNotification } from '../../../utils/owner-notification';
 import { isRecipientEmailValidForSending } from '../../../utils/recipients';
 import { renderEmailWithI18N } from '../../../utils/render-email-with-i18n';
 import type { JobRunIO } from '../../client/_internal/job';
@@ -69,8 +70,15 @@ export const run = async ({ payload, io }: { payload: TSendRecipientSignedEmailJ
 
   const recipientReference = recipientName || recipientEmail;
 
-  // Don't send notification if the owner is the one who signed.
-  if (owner.email === recipientEmail || !isRecipientEmailValidForSending(recipient)) {
+  const ownerNotification = resolveOwnerNotification({ owner, documentMeta: envelope.documentMeta });
+
+  // Don't send notification if the owner is the one who signed (the owner is only
+  // implicitly notified when no custom list is defined).
+  if (!isRecipientEmailValidForSending(recipient) || (!ownerNotification.isCustom && owner.email === recipientEmail)) {
+    return;
+  }
+
+  if (ownerNotification.recipients.length === 0) {
     return;
   }
 
@@ -92,6 +100,7 @@ export const run = async ({ payload, io }: { payload: TSendRecipientSignedEmailJ
     recipientName,
     recipientEmail,
     assetBaseUrl,
+    documentLink: ownerNotification.link ?? undefined,
   });
 
   await io.runTask('send-recipient-signed-email', async () => {
@@ -104,15 +113,17 @@ export const run = async ({ payload, io }: { payload: TSendRecipientSignedEmailJ
       }),
     ]);
 
-    await emailTransport.sendMail({
-      to: {
-        name: owner.name ?? '',
-        address: owner.email,
-      },
-      from: senderEmail,
-      subject: i18n._(msg`${recipientReference} has signed "${envelope.title}"`),
-      html,
-      text,
-    });
+    // One e-mail per address so the notified people do not see each other.
+    await Promise.all(
+      ownerNotification.recipients.map(async (to) =>
+        emailTransport.sendMail({
+          to,
+          from: senderEmail,
+          subject: i18n._(msg`${recipientReference} has signed "${envelope.title}"`),
+          html,
+          text,
+        }),
+      ),
+    );
   });
 };
