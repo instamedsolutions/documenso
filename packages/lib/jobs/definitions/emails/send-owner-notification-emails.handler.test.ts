@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_DOCUMENT_EMAIL_SETTINGS } from '../../../types/document-email';
 
 const {
+  assertLimitsMock,
   createElementMock,
   envelopeFindFirstMock,
   getEmailContextMock,
@@ -10,6 +11,7 @@ const {
   renderEmailWithI18NMock,
   sendMailMock,
 } = vi.hoisted(() => ({
+  assertLimitsMock: vi.fn(),
   createElementMock: vi.fn((..._args: unknown[]) => null),
   envelopeFindFirstMock: vi.fn(),
   getEmailContextMock: vi.fn(),
@@ -34,6 +36,9 @@ vi.mock('../../../client-only/providers/i18n-server', () => ({
   getI18nInstance: vi.fn().mockResolvedValue({ _: (value: string) => value }),
 }));
 vi.mock('../../../constants/app', () => ({ NEXT_PUBLIC_WEBAPP_URL: () => 'https://documenso.test' }));
+vi.mock('../../../server-only/rate-limit/assert-organisation-rates-and-limits', () => ({
+  assertOrganisationRatesAndLimits: assertLimitsMock,
+}));
 vi.mock('../../../server-only/email/get-email-context', () => ({ getEmailContext: getEmailContextMock }));
 vi.mock('../../../utils/envelope', () => ({ unsafeBuildEnvelopeIdQuery: vi.fn(() => ({ id: 'envelope-1' })) }));
 vi.mock('../../../utils/recipients', () => ({ isRecipientEmailValidForSending: vi.fn(() => true) }));
@@ -58,16 +63,16 @@ const buildEnvelope = (
   documentMeta: { emailSettings: { ...DEFAULT_DOCUMENT_EMAIL_SETTINGS, ...emailSettings }, ...ownerNotification },
 });
 
-const signed = () =>
+const signed = (io: Record<string, unknown> = {}) =>
   runSigned({
     payload: { documentId: 1, recipientId: 2 },
-    io: { runTask: async (_id: string, fn: () => Promise<unknown>) => fn() },
+    io: { ...io, runTask: async (_id: string, fn: () => Promise<unknown>) => fn() },
   } as unknown as Parameters<typeof runSigned>[0]);
 
-const expired = () =>
+const expired = (io: Record<string, unknown> = {}) =>
   runExpired({
     payload: { envelopeId: 'envelope-1', recipientId: 2 },
-    io: { runTask: async (_id: string, fn: () => Promise<unknown>) => fn() },
+    io: { ...io, runTask: async (_id: string, fn: () => Promise<unknown>) => fn() },
   } as unknown as Parameters<typeof runExpired>[0]);
 
 const sentTo = () => sendMailMock.mock.calls.map(([mail]) => mail.to.address);
@@ -87,10 +92,14 @@ describe.each([
 
   beforeEach(() => {
     vi.clearAllMocks();
+    assertLimitsMock.mockReset();
+    assertLimitsMock.mockResolvedValue(undefined);
     getEmailContextMock.mockResolvedValue({
       branding: undefined,
       emailLanguage: 'en',
       senderEmail: 'sender@example.com',
+      organisationId: 'org-1',
+      claims: {},
       emailsDisabled: false,
       emailTransport: { sendMail: sendMailMock },
     });
@@ -109,6 +118,33 @@ describe.each([
     await runJob();
 
     expect(sentTo()).toEqual(['a@example.com', 'b@example.com']);
+  });
+
+  it('meters custom addresses against the email quota and drops the ones over the limit', async () => {
+    assertLimitsMock.mockResolvedValueOnce(undefined).mockRejectedValue(new Error('limit'));
+    setEnvelope({}, { ownerNotificationEmails: ['a@example.com', 'b@example.com'] });
+    await runJob({ logger: { warn: vi.fn() } });
+
+    expect(sentTo()).toEqual(['a@example.com']);
+
+    vi.clearAllMocks();
+    assertLimitsMock.mockReset();
+    assertLimitsMock.mockResolvedValue(undefined);
+    getEmailContextMock.mockResolvedValue({
+      branding: undefined,
+      emailLanguage: 'en',
+      senderEmail: 'sender@example.com',
+      organisationId: 'org-1',
+      claims: {},
+      emailsDisabled: false,
+      emailTransport: { sendMail: sendMailMock },
+    });
+    renderEmailWithI18NMock.mockResolvedValue('rendered');
+    setEnvelope({}, { ownerNotificationEmails: null });
+    await runJob();
+
+    expect(assertLimitsMock).not.toHaveBeenCalled();
+    expect(sentTo()).toEqual(['owner@example.com']);
   });
 
   it('notifies nobody for an empty list', async () => {

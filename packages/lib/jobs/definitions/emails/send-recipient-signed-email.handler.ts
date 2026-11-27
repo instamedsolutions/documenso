@@ -7,6 +7,7 @@ import { createElement } from 'react';
 import { getI18nInstance } from '../../../client-only/providers/i18n-server';
 import { NEXT_PUBLIC_WEBAPP_URL } from '../../../constants/app';
 import { getEmailContext } from '../../../server-only/email/get-email-context';
+import { meterOwnerNotificationRecipients } from '../../../server-only/rate-limit/meter-owner-notification-recipients';
 import { extractDerivedDocumentEmailSettings } from '../../../types/document-email';
 import { unsafeBuildEnvelopeIdQuery } from '../../../utils/envelope';
 import { resolveOwnerNotification } from '../../../utils/owner-notification';
@@ -82,7 +83,7 @@ export const run = async ({ payload, io }: { payload: TSendRecipientSignedEmailJ
     return;
   }
 
-  const { branding, emailLanguage, senderEmail, emailTransport } = await getEmailContext({
+  const { branding, emailLanguage, senderEmail, emailTransport, organisationId, claims } = await getEmailContext({
     emailType: 'INTERNAL',
     source: {
       type: 'team',
@@ -113,9 +114,22 @@ export const run = async ({ payload, io }: { payload: TSendRecipientSignedEmailJ
       }),
     ]);
 
+    const ownerRecipientsToNotify = await meterOwnerNotificationRecipients({
+      target: ownerNotification,
+      organisationId,
+      organisationClaim: claims,
+      onLimitExceeded: (dropped) =>
+        io.logger.warn({
+          msg: 'Owner recipient signed emails dropped: org email limit exceeded',
+          organisationId,
+          envelopeId: envelope.id,
+          droppedCount: dropped.length,
+        }),
+    });
+
     // One e-mail per address so the notified people do not see each other.
     await Promise.all(
-      ownerNotification.recipients.map(async (to) =>
+      ownerRecipientsToNotify.map(async (to) =>
         emailTransport.sendMail({
           to,
           from: senderEmail,

@@ -6,6 +6,7 @@ import { createElement } from 'react';
 import { getI18nInstance } from '../../../client-only/providers/i18n-server';
 import { NEXT_PUBLIC_WEBAPP_URL } from '../../../constants/app';
 import { getEmailContext } from '../../../server-only/email/get-email-context';
+import { meterOwnerNotificationRecipients } from '../../../server-only/rate-limit/meter-owner-notification-recipients';
 import { extractDerivedDocumentEmailSettings } from '../../../types/document-email';
 import { resolveOwnerNotification } from '../../../utils/owner-notification';
 import { renderEmailWithI18N } from '../../../utils/render-email-with-i18n';
@@ -62,14 +63,15 @@ export const run = async ({ payload, io }: { payload: TSendOwnerRecipientExpired
     return;
   }
 
-  const { branding, emailLanguage, senderEmail, emailsDisabled, emailTransport } = await getEmailContext({
-    emailType: 'RECIPIENT',
-    source: {
-      type: 'team',
-      teamId: envelope.teamId,
-    },
-    meta: documentMeta,
-  });
+  const { branding, emailLanguage, senderEmail, emailsDisabled, emailTransport, organisationId, claims } =
+    await getEmailContext({
+      emailType: 'RECIPIENT',
+      source: {
+        type: 'team',
+        teamId: envelope.teamId,
+      },
+      meta: documentMeta,
+    });
 
   // Don't send any emails if the organisation has email sending disabled.
   if (emailsDisabled) {
@@ -105,8 +107,21 @@ export const run = async ({ payload, io }: { payload: TSendOwnerRecipientExpired
       }),
     ]);
 
+    const ownerRecipientsToNotify = await meterOwnerNotificationRecipients({
+      target: ownerNotification,
+      organisationId,
+      organisationClaim: claims,
+      onLimitExceeded: (dropped) =>
+        io.logger.warn({
+          msg: 'Owner recipient expired emails dropped: org email limit exceeded',
+          organisationId,
+          envelopeId: envelope.id,
+          droppedCount: dropped.length,
+        }),
+    });
+
     await Promise.all(
-      ownerNotification.recipients.map(async (to) =>
+      ownerRecipientsToNotify.map(async (to) =>
         emailTransport.sendMail({
           to,
           from: senderEmail,

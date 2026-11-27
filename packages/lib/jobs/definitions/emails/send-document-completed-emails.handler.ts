@@ -8,6 +8,7 @@ import { getI18nInstance } from '../../../client-only/providers/i18n-server';
 import { NEXT_PUBLIC_WEBAPP_URL } from '../../../constants/app';
 import { getEmailContext } from '../../../server-only/email/get-email-context';
 import { assertOrganisationRatesAndLimits } from '../../../server-only/rate-limit/assert-organisation-rates-and-limits';
+import { meterOwnerNotificationRecipients } from '../../../server-only/rate-limit/meter-owner-notification-recipients';
 import { DOCUMENT_AUDIT_LOG_TYPE } from '../../../types/document-audit-logs';
 import { extractDerivedDocumentEmailSettings } from '../../../types/document-email';
 import { getFileServerSide } from '../../../universal/upload/get-file.server';
@@ -151,9 +152,22 @@ export const run = async ({ payload, io }: { payload: TSendDocumentCompletedEmai
 
     const i18n = await getI18nInstance(emailLanguage);
 
+    const ownerRecipientsToNotify = await meterOwnerNotificationRecipients({
+      target: ownerNotification,
+      organisationId,
+      organisationClaim: claims,
+      onLimitExceeded: (dropped) =>
+        io.logger.warn({
+          msg: 'Owner completion emails dropped: org email limit exceeded',
+          organisationId,
+          envelopeId: envelope.id,
+          droppedCount: dropped.length,
+        }),
+    });
+
     // One e-mail per address so the notified people do not see each other.
     await Promise.all(
-      ownerNotification.recipients.map(async (to) => {
+      ownerRecipientsToNotify.map(async (to) => {
         await emailTransport.sendMail({
           to: [to],
           from: senderEmail,
@@ -223,7 +237,8 @@ export const run = async ({ payload, io }: { payload: TSendDocumentCompletedEmai
       const template = createElement(DocumentCompletedEmailTemplate, {
         documentName: envelope.title,
         assetBaseUrl,
-        downloadLink: recipient.email === owner.email ? documentOwnerDownloadLink : downloadLink,
+        downloadLink:
+          recipient.email === owner.email ? (ownerNotification.link ?? documentOwnerDownloadLink) : downloadLink,
         customBody:
           isDirectTemplate && envelope.documentMeta?.message
             ? renderCustomEmailTemplate(envelope.documentMeta.message, customEmailTemplate)

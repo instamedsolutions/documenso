@@ -102,6 +102,7 @@ vi.mock('../../../utils/document-audit-logs', () => ({
   createDocumentAuditLogData: vi.fn((data) => data),
 }));
 
+import { assertOrganisationRatesAndLimits } from '../../../server-only/rate-limit/assert-organisation-rates-and-limits';
 import { run } from './send-document-completed-emails.handler';
 
 const buildEnvelope = (
@@ -284,6 +285,43 @@ describe('sendDocumentCompletedEmails handler', () => {
       await run_();
 
       expect(mailerSendMailMock).not.toHaveBeenCalled();
+    });
+
+    it('applies the custom link to the owner e-mail received as a recipient', async () => {
+      const envelope = buildEnvelope(
+        { documentCompleted: true, ownerDocumentCompleted: true },
+        { ownerNotificationEmails: null, ownerNotificationLink: 'https://app.instamed.fr/v2/patients/123/documents' },
+      );
+      envelope.recipients[0].email = 'owner@example.com';
+      prismaEnvelopeFindUniqueMock.mockResolvedValue(envelope);
+      await run_();
+
+      const links = renderEmailWithI18NMock.mock.calls.map(
+        ([element]) => (element as { props: { downloadLink: string } }).props.downloadLink,
+      );
+
+      expect(sentTo()).toEqual(['owner@example.com']);
+      expect(links[0]).toBe('https://app.instamed.fr/v2/patients/123/documents');
+    });
+
+    it('meters custom addresses against the email quota, but never the owner', async () => {
+      const assertMock = vi.mocked(assertOrganisationRatesAndLimits);
+
+      prismaEnvelopeFindUniqueMock.mockResolvedValue(buildEnvelope(ownerOnly, { ownerNotificationEmails: null }));
+      await run_();
+      expect(assertMock).not.toHaveBeenCalled();
+
+      vi.clearAllMocks();
+      assertMock.mockReset();
+      assertMock.mockResolvedValueOnce(undefined).mockRejectedValue(new Error('limit'));
+      prismaEnvelopeFindUniqueMock.mockResolvedValue(
+        buildEnvelope(ownerOnly, {
+          ownerNotificationEmails: ['a@example.com', 'b@example.com', 'c@example.com'],
+        }),
+      );
+      await run_();
+
+      expect(sentTo()).toEqual(['a@example.com']);
     });
 
     it('uses the custom link as the button of the owner e-mail only', async () => {
