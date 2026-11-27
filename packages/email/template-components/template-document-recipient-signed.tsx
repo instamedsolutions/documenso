@@ -1,6 +1,6 @@
 import { Trans } from '@lingui/react/macro';
 
-import { Column, Img, Section, Text } from '../components';
+import { Button, Column, Img, Section, Text } from '../components';
 import { getEmailAssetUrl } from '../utils/asset-url';
 import { TemplateDocumentImage } from './template-document-image';
 
@@ -9,6 +9,8 @@ export interface TemplateDocumentRecipientSignedProps {
   recipientName: string;
   recipientEmail: string;
   assetBaseUrl: string;
+  /** Optional button link, no button is rendered without it. */
+  documentLink?: string;
 }
 
 export const TemplateDocumentRecipientSigned = ({
@@ -16,6 +18,7 @@ export const TemplateDocumentRecipientSigned = ({
   recipientName,
   recipientEmail,
   assetBaseUrl,
+  documentLink,
 }: TemplateDocumentRecipientSignedProps) => {
   const recipientReference = recipientName || recipientEmail;
 
@@ -46,6 +49,17 @@ export const TemplateDocumentRecipientSigned = ({
         <Text className="mx-auto mt-1 mb-6 max-w-[80%] text-center text-base text-muted-foreground">
           <Trans>{recipientReference} has completed signing the document.</Trans>
         </Text>
+
+        {documentLink && (
+          <Section className="mb-6 text-center">
+            <Button
+              className="inline-flex items-center justify-center rounded-lg bg-primary px-6 py-3 text-center font-medium text-primary-foreground text-sm no-underline"
+              href={documentLink}
+            >
+              <Trans>View Document</Trans>
+            </Button>
+          </Section>
+        )}
       </Section>
     </>
   );

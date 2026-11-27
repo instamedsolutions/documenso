@@ -10,6 +10,7 @@ import { DocumentDistributionMethod, DocumentSigningOrder } from '@prisma/client
 import { z } from 'zod';
 
 import { ZDocumentEmailSettingsSchema } from './document-email';
+import { ZOwnerNotificationEmailsSchema, ZOwnerNotificationLinkSchema } from './owner-notification';
 
 /**
  * The full document response schema.
@@ -128,6 +129,8 @@ export const ZDocumentMetaCreateSchema = z.object({
   emailSettings: ZDocumentEmailSettingsSchema.nullish(),
   envelopeExpirationPeriod: ZEnvelopeExpirationPeriod.nullish(),
   reminderSettings: ZEnvelopeReminderSettings.nullish(),
+  ownerNotificationEmails: ZOwnerNotificationEmailsSchema.nullish(),
+  ownerNotificationLink: ZOwnerNotificationLinkSchema.nullish(),
 });
 
 export type TDocumentMetaCreate = z.infer<typeof ZDocumentMetaCreateSchema>;

@@ -585,6 +585,8 @@ export const createDocumentFromTemplate = async ({
         drawSignatureEnabled: override?.drawSignatureEnabled ?? template.documentMeta?.drawSignatureEnabled,
         allowDictateNextSigner: override?.allowDictateNextSigner ?? template.documentMeta?.allowDictateNextSigner,
         envelopeExpirationPeriod: override?.envelopeExpirationPeriod ?? template.documentMeta?.envelopeExpirationPeriod,
+        ownerNotificationEmails: template.documentMeta?.ownerNotificationEmails,
+        ownerNotificationLink: template.documentMeta?.ownerNotificationLink,
       },
       signatureLevel,
     ),

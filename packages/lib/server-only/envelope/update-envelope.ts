@@ -3,8 +3,8 @@ import type { ApiRequestMetadata } from '@documenso/lib/universal/extract-reques
 import type { CreateDocumentAuditLogDataResponse } from '@documenso/lib/utils/document-audit-logs';
 import { createDocumentAuditLogData } from '@documenso/lib/utils/document-audit-logs';
 import { prisma } from '@documenso/prisma';
-import type { DocumentMeta, DocumentVisibility, Prisma, TemplateType } from '@prisma/client';
-import { DocumentStatus, EnvelopeType, FolderType, WebhookTriggerEvents } from '@prisma/client';
+import type { DocumentMeta, DocumentVisibility, TemplateType } from '@prisma/client';
+import { DocumentStatus, EnvelopeType, FolderType, Prisma, WebhookTriggerEvents } from '@prisma/client';
 import { isDeepEqual } from 'remeda';
 
 import { TEAM_DOCUMENT_VISIBILITY_MAP } from '../../constants/teams';
@@ -336,6 +336,9 @@ export const updateEnvelope = async ({
           update: {
             ...meta,
             emailSettings: meta?.emailSettings || undefined,
+            // A JSON column needs an explicit DB null to be cleared.
+            ownerNotificationEmails:
+              meta?.ownerNotificationEmails === null ? Prisma.DbNull : (meta?.ownerNotificationEmails ?? undefined),
           },
         },
       },
