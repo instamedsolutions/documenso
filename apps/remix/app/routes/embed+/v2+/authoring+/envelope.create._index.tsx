@@ -403,6 +403,8 @@ const EnvelopeCreatePage = ({ embedAuthoringOptions }: EnvelopeCreatePageProps) 
       documentMeta: {
         id: '',
         ...defaultDocumentMeta,
+        ownerNotificationEmails: null,
+        ownerNotificationLink: null,
       },
       recipients,
       fields: [],
